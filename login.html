@@ -1,0 +1,530 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Đăng nhập &amp; Đăng ký - GreenShift</title>
+  <link rel="icon" type="image/png" href="assets/images/logo.png">
+  <link rel="stylesheet" href="assets/css/style.css">
+  <style>
+    body {
+      background-color: #f8fafc;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      font-family: var(--font-sans, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif);
+      margin: 0;
+      padding: 1rem;
+    }
+    .login-container {
+      background: white;
+      padding: 2.5rem;
+      border-radius: 12px;
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+      width: 100%;
+      max-width: 440px;
+      border: 1px solid #e2e8f0;
+      box-sizing: border-box;
+    }
+    .login-header {
+      text-align: center;
+      margin-bottom: 1.5rem;
+    }
+    .login-logo {
+      font-size: 2rem;
+      color: #1a7f4b;
+      font-weight: 800;
+      margin-bottom: 0.5rem;
+    }
+    .auth-tabs {
+      display: flex;
+      border-bottom: 2px solid #e2e8f0;
+      margin-bottom: 1.5rem;
+    }
+    .auth-tab {
+      flex: 1;
+      text-align: center;
+      padding: 0.75rem 0.5rem;
+      font-size: 0.95rem;
+      font-weight: 600;
+      color: #64748b;
+      background: none;
+      border: none;
+      border-bottom: 2px solid transparent;
+      margin-bottom: -2px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      outline: none;
+    }
+    .auth-tab:hover {
+      color: #1a7f4b;
+    }
+    .auth-tab.active {
+      color: #1a7f4b;
+      border-bottom-color: #1a7f4b;
+      font-weight: 700;
+    }
+    .form-group {
+      margin-bottom: 1.25rem;
+    }
+    .form-group label {
+      display: block;
+      margin-bottom: 0.4rem;
+      font-size: 0.88rem;
+      font-weight: 600;
+      color: #334155;
+    }
+    .form-control {
+      width: 100%;
+      padding: 0.75rem 1rem;
+      border: 1px solid #cbd5e1;
+      border-radius: 6px;
+      font-size: 0.95rem;
+      box-sizing: border-box;
+      transition: all 0.2s;
+      font-family: inherit;
+    }
+    .form-control:focus {
+      outline: none;
+      border-color: #1a7f4b;
+      box-shadow: 0 0 0 3px rgba(26, 127, 75, 0.15);
+    }
+    .btn-login {
+      width: 100%;
+      padding: 0.85rem;
+      background: #1a7f4b;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      font-size: 1rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: background 0.2s;
+      margin-top: 0.5rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 0.5rem;
+    }
+    .btn-login:hover {
+      background: #0f4a2b;
+    }
+    .auth-alert {
+      padding: 0.75rem 1rem;
+      border-radius: 6px;
+      font-size: 0.88rem;
+      margin-bottom: 1.25rem;
+      display: none;
+      line-height: 1.4;
+      font-weight: 500;
+    }
+    .auth-alert.error {
+      display: block;
+      background: #fef2f2;
+      color: #991b1b;
+      border: 1px solid #fecaca;
+    }
+    .auth-alert.success {
+      display: block;
+      background: #ecfdf5;
+      color: #065f46;
+      border: 1px solid #a7f3d0;
+    }
+    .auth-switch {
+      text-align: center;
+      margin-top: 1.25rem;
+      font-size: 0.88rem;
+      color: #64748b;
+    }
+    .auth-switch a {
+      color: #1a7f4b;
+      font-weight: 700;
+      text-decoration: none;
+      cursor: pointer;
+    }
+    .auth-switch a:hover {
+      text-decoration: underline;
+    }
+    .back-home {
+      position: absolute;
+      top: 1.5rem;
+      left: 1.5rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      text-decoration: none;
+      color: #1a7f4b;
+      font-weight: 700;
+      font-size: 0.9rem;
+      padding: 0.5rem 1rem;
+      border-radius: 6px;
+      background: white;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.06);
+      border: 1px solid #e2e8f0;
+      transition: all 0.2s;
+    }
+    .back-home:hover {
+      background: #f1f5f9;
+      transform: translateX(-2px);
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Nút quay lại trang chủ -->
+  <a href="index.html" class="back-home">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>
+    <span>Về trang chủ</span>
+  </a>
+
+  <div class="login-container">
+    <div class="login-header">
+      <div class="login-logo">GreenShift</div>
+      <h2 id="auth-heading" style="color: #0f172a; font-size: 1.35rem; margin: 0 0 0.25rem 0; font-weight: 800;">Đăng Nhập Hệ Thống</h2>
+      <p id="auth-subheading" style="color: #64748b; font-size: 0.88rem; margin: 0;">Nền tảng Quản trị Phát thải Carbon &amp; ESG</p>
+    </div>
+
+    <!-- Thanh chuyển đổi Đăng nhập / Đăng ký -->
+    <div class="auth-tabs">
+      <button type="button" class="auth-tab active" id="tab-btn-login" onclick="switchTab('login')">Đăng nhập</button>
+      <button type="button" class="auth-tab" id="tab-btn-signup" onclick="switchTab('signup')">Đăng ký</button>
+    </div>
+
+    <!-- Thông báo lỗi / thành công -->
+    <div id="auth-alert" class="auth-alert"></div>
+
+    <!-- ============================================== -->
+    <!-- FORM ĐĂNG NHẬP (LOG IN)                        -->
+    <!-- ============================================== -->
+    <div id="section-login">
+      <form id="login-form">
+        <div class="form-group">
+          <label>Chọn Phân Hệ Quản Lý</label>
+          <select id="login-system" class="form-control" required>
+            <option value="carbon" selected>Carbon Inventory (Kiểm kê KNK ISO 14064)</option>
+            <option value="cbam">CBAM (Cơ chế Biên giới Carbon EU)</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label>Vị trí công việc / Vai trò</label>
+          <select id="login-role" class="form-control" required>
+            <option value="engineer" selected>Kỹ sư (Kỹ thuật &amp; Vận hành)</option>
+            <option value="accountant">Kế toán (Chi phí &amp; Hoạt động)</option>
+            <option value="esg_director">Giám đốc / Ban ESG (Chiến lược &amp; Báo cáo)</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label>Tài khoản / Email</label>
+          <input type="text" id="login-username" class="form-control" placeholder="Nhập tài khoản hoặc email" required autocomplete="username">
+        </div>
+
+        <div class="form-group">
+          <label>Mật khẩu</label>
+          <div style="position: relative;">
+            <input type="password" id="login-password" class="form-control" placeholder="Nhập mật khẩu" required autocomplete="current-password" style="padding-right: 2.5rem;">
+            <button type="button" tabindex="-1" onclick="togglePassword('login-password', this)" style="position: absolute; right: 0.5rem; top: 50%; transform: translateY(-50%); background: none; border: none; cursor: pointer; color: #9ca3af; padding: 0.25rem;">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+            </button>
+          </div>
+        </div>
+
+        <button type="submit" class="btn-login">Đăng Nhập Hệ Thống &rarr;</button>
+
+        <div class="auth-switch">
+          Chưa có tài khoản? <a onclick="switchTab('signup')">Đăng ký ngay</a>
+        </div>
+      </form>
+    </div>
+
+    <!-- ============================================== -->
+    <!-- FORM ĐĂNG KÝ (SIGN UP)                         -->
+    <!-- ============================================== -->
+    <div id="section-signup" style="display: none;">
+      <form id="signup-form">
+        <div class="form-group">
+          <label>Họ và tên *</label>
+          <input type="text" id="signup-fullname" class="form-control" placeholder="Ví dụ: Nguyễn Văn An" required autocomplete="name">
+        </div>
+
+        <div class="form-group">
+          <label>Tên Doanh nghiệp / Công ty *</label>
+          <input type="text" id="signup-company" class="form-control" placeholder="Ví dụ: Công ty Cổ phần GreenShift" required>
+        </div>
+
+        <div class="form-group">
+          <label>Tài khoản / Email *</label>
+          <input type="text" id="signup-email" class="form-control" placeholder="Ví dụ: nguyenvanan@company.com" required autocomplete="email">
+        </div>
+
+        <div class="form-group">
+          <label>Mật khẩu *</label>
+          <div style="position: relative;">
+            <input type="password" id="signup-password" class="form-control" placeholder="Nhập mật khẩu (tối thiểu 4 ký tự)" minlength="4" required autocomplete="new-password" style="padding-right: 2.5rem;">
+            <button type="button" tabindex="-1" onclick="togglePassword('signup-password', this)" style="position: absolute; right: 0.5rem; top: 50%; transform: translateY(-50%); background: none; border: none; cursor: pointer; color: #9ca3af; padding: 0.25rem;">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+            </button>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label>Xác nhận lại mật khẩu *</label>
+          <div style="position: relative;">
+            <input type="password" id="signup-confirm-password" class="form-control" placeholder="Nhập lại mật khẩu để xác nhận" minlength="4" required autocomplete="new-password" style="padding-right: 2.5rem;">
+            <button type="button" tabindex="-1" onclick="togglePassword('signup-confirm-password', this)" style="position: absolute; right: 0.5rem; top: 50%; transform: translateY(-50%); background: none; border: none; cursor: pointer; color: #9ca3af; padding: 0.25rem;">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+            </button>
+          </div>
+        </div>
+
+        <button type="submit" class="btn-login">Đăng Ký Tài Khoản &rarr;</button>
+
+        <div class="auth-switch">
+          Đã có tài khoản? <a onclick="switchTab('login')">Đăng nhập ngay</a>
+        </div>
+      </form>
+    </div>
+
+  </div>
+
+  <script>
+    // Chuyển đổi qua lại giữa Tab Đăng nhập & Đăng ký
+    function switchTab(mode) {
+      const tabLogin = document.getElementById('tab-btn-login');
+      const tabSignup = document.getElementById('tab-btn-signup');
+      const secLogin = document.getElementById('section-login');
+      const secSignup = document.getElementById('section-signup');
+      const heading = document.getElementById('auth-heading');
+      const subheading = document.getElementById('auth-subheading');
+      const alertBox = document.getElementById('auth-alert');
+
+      if (alertBox) alertBox.className = 'auth-alert'; // ẩn thông báo cũ
+
+      if (mode === 'signup') {
+        tabLogin.classList.remove('active');
+        tabSignup.classList.add('active');
+        secLogin.style.display = 'none';
+        secSignup.style.display = 'block';
+        heading.innerText = 'Đăng Ký Tài Khoản';
+        subheading.innerText = 'Khởi tạo không gian làm việc GreenShift';
+      } else {
+        tabSignup.classList.remove('active');
+        tabLogin.classList.add('active');
+        secSignup.style.display = 'none';
+        secLogin.style.display = 'block';
+        heading.innerText = 'Đăng Nhập Hệ Thống';
+        subheading.innerText = 'Nền tảng Quản trị Phát thải Carbon & ESG';
+      }
+    }
+
+    // Toggle Password Visibility
+    function togglePassword(inputId, btn) {
+      const input = document.getElementById(inputId);
+      if (!input) return;
+      if (input.type === 'password') {
+        input.type = 'text';
+        btn.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"></path><line x1="1" y1="1" x2="23" y2="23"></line></svg>';
+        btn.style.color = '#1a7f4b';
+      } else {
+        input.type = 'password';
+        btn.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path><circle cx="12" cy="12" r="3"></circle></svg>';
+        btn.style.color = '#9ca3af';
+      }
+    }
+
+    // Hiển thị thông báo
+    function showAlert(msg, type = 'error') {
+      const alertBox = document.getElementById('auth-alert');
+      if (!alertBox) return;
+      alertBox.textContent = msg;
+      alertBox.className = 'auth-alert ' + type;
+    }
+
+    // Dọn dẹp tài khoản demo mặc định cũ nếu tồn tại trong gs_users (chỉ giữ tài khoản do người dùng đăng ký)
+    (function cleanupLegacyDefault() {
+      try {
+        let users = JSON.parse(localStorage.getItem('gs_users')) || [];
+        const cleaned = users.filter(u => u.username !== 'greenshiftacl2026');
+        if (cleaned.length !== users.length) {
+          localStorage.setItem('gs_users', JSON.stringify(cleaned));
+        }
+      } catch (err) {
+        console.warn(err);
+      }
+    })();
+
+    // Thuật toán băm mật khẩu SHA-256 bảo mật phía Client
+    async function hashPassword(str) {
+      if (!str) return '';
+      try {
+        if (window.crypto && crypto.subtle) {
+          const msgBuffer = new TextEncoder().encode(str);
+          const hashBuffer = await crypto.subtle.digest('SHA-256', msgBuffer);
+          const hashArray = Array.from(new Uint8Array(hashBuffer));
+          return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+        }
+      } catch (e) {
+        console.warn('Crypto subtle unavailable, using fallback hash');
+      }
+      let hash = 0;
+      for (let i = 0; i < str.length; i++) {
+        hash = ((hash << 5) - hash) + str.charCodeAt(i);
+        hash |= 0;
+      }
+      return 'h_' + Math.abs(hash).toString(16);
+    }
+
+    // ============================================
+    // XỬ LÝ ĐĂNG NHẬP (LOG IN)
+    // ============================================
+    const loginForm = document.getElementById('login-form');
+    loginForm.addEventListener('submit', async function(e) {
+      e.preventDefault();
+      
+      const usernameInput = document.getElementById('login-username').value.trim();
+      const passwordInput = document.getElementById('login-password').value.trim();
+      const system = document.getElementById('login-system').value;
+      const role = document.getElementById('login-role').value;
+
+      if (!usernameInput || !passwordInput) {
+        showAlert('Vui lòng nhập tài khoản và mật khẩu!');
+        return;
+      }
+
+      const users = JSON.parse(localStorage.getItem('gs_users')) || [];
+      const inputLower = usernameInput.toLowerCase();
+      const enteredHash = await hashPassword(passwordInput);
+
+      // Chỉ tài khoản đã đăng ký trong gs_users mới có thể đăng nhập
+      const userIndex = users.findIndex(u => {
+        const matchUser = (u.username && u.username.toLowerCase() === inputLower) ||
+                          (u.email && u.email.toLowerCase() === inputLower);
+        const matchPass = (u.passwordHash && u.passwordHash === enteredHash) ||
+                          (u.password && (u.password === passwordInput || u.password === enteredHash));
+        return matchUser && matchPass;
+      });
+
+      if (userIndex !== -1) {
+        const loggedUser = users[userIndex];
+        
+        // Tự động nâng cấp mật khẩu cũ sang băm SHA-256
+        if (!loggedUser.passwordHash) {
+          loggedUser.passwordHash = enteredHash;
+          delete loggedUser.password;
+        }
+
+        // Lưu phiên đăng nhập & vị trí công việc chính thức từ hồ sơ máy chủ (không nhận ghi đè client)
+        const assignedRole = loggedUser.role || 'engineer';
+        localStorage.setItem('gs_current_user', loggedUser.username || loggedUser.email);
+        localStorage.setItem('gs_user_role', assignedRole);
+        const facId = loggedUser.facilityId || loggedUser.facility_id || (loggedUser.company && (loggedUser.company.facilityId || loggedUser.company.facility_id)) || 1;
+        localStorage.setItem('gs_facility_id', String(facId));
+        
+        showAlert('Đăng nhập thành công! Đang chuyển hướng...', 'success');
+
+        setTimeout(() => {
+          if (system === 'cbam') {
+            window.location.href = 'cbam-dashboard.html';
+          } else {
+            window.location.href = 'carbon-inventory.html';
+          }
+        }, 400);
+      } else {
+        showAlert('Tài khoản hoặc mật khẩu không chính xác! Chỉ tài khoản đã đăng ký mới có thể đăng nhập.');
+      }
+    });
+
+    // ============================================
+    // XỬ LÝ ĐĂNG KÝ (SIGN UP)
+    // ============================================
+    const signupForm = document.getElementById('signup-form');
+    signupForm.addEventListener('submit', async function(e) {
+      e.preventDefault();
+
+      const fullName = document.getElementById('signup-fullname').value.trim();
+      const companyName = (document.getElementById('signup-company')?.value || '').trim();
+      const email = document.getElementById('signup-email').value.trim();
+      const password = document.getElementById('signup-password').value.trim();
+      const confirmPassword = document.getElementById('signup-confirm-password').value.trim();
+
+      if (!fullName || !email || !password || !confirmPassword) {
+        showAlert('Vui lòng nhập đầy đủ tất cả các trường thông tin!');
+        return;
+      }
+
+      if (password.length < 4) {
+        showAlert('Mật khẩu tối thiểu cần 4 ký tự!');
+        return;
+      }
+
+      if (password !== confirmPassword) {
+        showAlert('Mật khẩu nhập lại không khớp! Vui lòng kiểm tra lại.');
+        return;
+      }
+
+      let users = JSON.parse(localStorage.getItem('gs_users')) || [];
+      const emailLower = email.toLowerCase();
+
+      // Kiểm tra trùng lặp
+      const exists = users.some(u => 
+        (u.username && u.username.toLowerCase() === emailLower) ||
+        (u.email && u.email.toLowerCase() === emailLower)
+      );
+
+      if (exists) {
+        showAlert('Tài khoản / Email này đã tồn tại trong hệ thống. Vui lòng đăng nhập!');
+        return;
+      }
+
+      const finalCompanyName = companyName || `Công ty ${fullName}`;
+      const pwdHash = await hashPassword(password);
+
+      // Tạo tài khoản mới với mật khẩu đã băm SHA-256 (KHÔNG lưu plaintext)
+      const newFacilityId = Date.now();
+      const newUser = {
+        username: emailLower,
+        email: emailLower,
+        fullName: fullName,
+        role: 'engineer',
+        facilityId: newFacilityId,
+        facility_id: newFacilityId,
+        passwordHash: pwdHash,
+        createdAt: new Date().toISOString(),
+        company: {
+          facilityId: newFacilityId,
+          facility_id: newFacilityId,
+          name: finalCompanyName,
+          tax: '',
+          address: '',
+          industry: 'Sắt Thép',
+          ipccAR: 'AR5-100',
+          revenue: '0',
+          employees: '1',
+          production: '0',
+          branchCount: 0,
+          branches: [],
+          configured: false
+        }
+      };
+
+      users.push(newUser);
+      localStorage.setItem('gs_users', JSON.stringify(users));
+
+      // Reset form đăng ký
+      signupForm.reset();
+
+      // Chuyển người dùng sang tab Đăng nhập
+      switchTab('login');
+
+      // Điền sẵn tài khoản vừa đăng ký vào ô đăng nhập để người dùng nhập mật khẩu
+      document.getElementById('login-username').value = emailLower;
+      document.getElementById('login-password').value = '';
+      document.getElementById('login-password').focus();
+
+      showAlert('Đăng ký tài khoản thành công! Vui lòng nhập mật khẩu để đăng nhập.', 'success');
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,48 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Python Virtual Environments & Cache
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+env/
+ENV/
+
+# Environment variables & secrets
+.env*
+api/.env.local
+
+# Vercel & Deployment
+.vercel
+
+# IDE & Editor files
+.vscode/*
+!.vscode/settings.json
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+
+# OS Generated Files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# User data & Temporary Test Outputs
+data/users.json
+static/cbam_report_*.xlsx
+tests/*.xlsx
+tests/*.log
+*.tmp
+*.temp
+scratch/

@@ -42,4 +42,17 @@ assert.ok(actJs.includes("inputOpRate.value = rate;"), 'calcFromHours phải t�
 // 9. Instant tab switching cached data guard
 assert.ok(actJs.includes("_lastLoadedActDataStr"), 'loadActivityList phải có guard lưu trữ dữ liệu để chuyển tab tức thì');
 
-console.log('ALL 9 VERIFICATION CHECKS PASSED 100%!');
+// 10. All inline script blocks in carbon-inventory.html must parse without syntax error
+const scriptRegex = /<script\b[^>]*>([\s\S]*?)<\/script>/gi;
+let match;
+let scriptBlockCount = 0;
+while ((match = scriptRegex.exec(invHtml)) !== null) {
+  const code = match[1].trim();
+  if (code) {
+    scriptBlockCount++;
+    assert.doesNotThrow(() => new Function(code), `Khối script inline #${scriptBlockCount} trong carbon-inventory.html phải có cú pháp hợp lệ`);
+  }
+}
+assert.ok(scriptBlockCount >= 5, 'Phải có ít nhất 5 khối script inline được kiểm tra');
+
+console.log('ALL 10 VERIFICATION CHECKS PASSED 100%!');

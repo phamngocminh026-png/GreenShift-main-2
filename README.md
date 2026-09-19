@@ -1,4 +1,4 @@
-# 🌱 GreenShift | Carbon Intelligence & ESG Platform for Vietnamese Enterprises
+  # 🌱 GreenShift | Carbon Intelligence & ESG Platform for Vietnamese Enterprises
 
 [![Platform](https://img.shields.io/badge/Platform-Web%20%7C%20SaaS-10b981.svg)](#)
 [![Python](https://img.shields.io/badge/Python-3.10%2B-blue.svg)](https://www.python.org/)
@@ -129,3 +129,4 @@ GreenShift/
 ## 📄 Bản Quyền & Giấy Phép
 
 Copyright © 2026 GreenShift Team. All Rights Reserved.
+ 

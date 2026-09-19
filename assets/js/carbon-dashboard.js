@@ -125,7 +125,39 @@ function renderDashboard() {
     }
   }
 
-  const activities = JSON.parse(localStorage.getItem(storageKey) || '[]');
+  let activities = JSON.parse(localStorage.getItem(storageKey) || '[]');
+  if (typeof window !== 'undefined' && typeof window.decodeActivitiesData === 'function') {
+    activities = window.decodeActivitiesData(activities);
+  } else if (activities && activities._v === 2 && Array.isArray(activities._r) && Array.isArray(activities._d)) {
+    const d = activities._d;
+    activities = activities._r.map(row => ({
+      date: row[0] || '',
+      sourceId: row[1] || '',
+      sourceType: (row[2] !== '' && row[2] !== undefined) ? d[row[2]] : '',
+      sourceName: (row[3] !== '' && row[3] !== undefined) ? d[row[3]] : '',
+      amount: row[4] !== undefined ? row[4] : 0,
+      unit: (row[5] !== '' && row[5] !== undefined) ? d[row[5]] : '',
+      doc: (row[6] !== '' && row[6] !== undefined) ? d[row[6]] : '',
+      manager: (row[7] !== '' && row[7] !== undefined) ? d[row[7]] : 'Kỹ sư vận hành',
+      co2e: row[8] || '0.00',
+      biogenicCo2: row[9] || '0.00',
+      isBiomass: row[10] || 'false',
+      efName: (row[11] !== '' && row[11] !== undefined) ? d[row[11]] : '',
+      refName: (row[12] !== '' && row[12] !== undefined) ? d[row[12]] : '',
+      finalFactor: row[13] || '',
+      fileName: (row[14] !== '' && row[14] !== undefined) ? d[row[14]] : '',
+      createdAt: (row[15] !== '' && row[15] !== undefined) ? d[row[15]] : '',
+      entryRole: (row[16] !== '' && row[16] !== undefined) ? d[row[16]] : 'engineer',
+      entryMode: (row[17] !== '' && row[17] !== undefined) ? d[row[17]] : 'auto_daily',
+      isBaseline: row[18] || 'false',
+      isInvoice: row[19] || 'false',
+      isDowntime: row[20] || 'false',
+      recordType: (row[21] !== '' && row[21] !== undefined) ? d[row[21]] : 'normal',
+      stdHours: row[22] || '8',
+      downtimeHours: row[23] || '0',
+      overtimeHours: row[24] || '0'
+    }));
+  }
   
   // Filter by year and YTD
   const filtered = activities.filter(act => {

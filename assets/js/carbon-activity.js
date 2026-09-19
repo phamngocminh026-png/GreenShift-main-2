@@ -44,11 +44,7 @@
 
     if (actFilterInput) {
       actFilterInput.addEventListener('click', (e) => {
-        actFilterDropdown.classList.toggle('open');
-        if (actFilterDropdown.classList.contains('open')) {
-          renderActCol1();
-        }
-        e.stopPropagation();
+        window.toggleActivityCustomFilter(e);
       });
 
       document.addEventListener('click', (e) => {
@@ -376,11 +372,233 @@
 
       if (typeof localStorage !== 'undefined') {
         const sVal = localStorage.getItem(slugKey);
-        if (sVal && sVal !== '[]' && sVal !== '{}') return slugKey;
+        if (sVal && sVal !== '[]' && sVal !== '{}') {
+          if (rawKey !== slugKey && localStorage.getItem(rawKey)) {
+            try { localStorage.removeItem(rawKey); } catch(e) {}
+          }
+          return slugKey;
+        }
         const rVal = localStorage.getItem(rawKey);
-        if (rVal && rVal !== '[]' && rVal !== '{}') return rawKey;
+        if (rVal && rVal !== '[]' && rVal !== '{}') {
+          try {
+            localStorage.setItem(slugKey, rVal);
+            localStorage.removeItem(rawKey);
+          } catch(e) {}
+          return slugKey;
+        }
       }
       return slugKey;
+    }
+
+    // Helper nén tinh gọn dữ liệu nhật ký hoạt động
+    function compactActivitiesData(data) {
+      if (!Array.isArray(data)) return data;
+      return data.map(item => {
+        const clean = {};
+        for (const [k, v] of Object.entries(item)) {
+          if (v === '' || v === null || v === undefined) continue;
+          if (k === 'manager' && v === 'Kỹ sư vận hành') continue;
+          if (k === 'entryRole' && v === 'engineer') continue;
+          if (k === 'entryMode' && v === 'auto_daily') continue;
+          if (k === 'isBaseline' && v === 'false') continue;
+          if (k === 'isInvoice' && v === 'false') continue;
+          if (k === 'isDowntime' && v === 'false') continue;
+          if (k === 'recordType' && v === 'normal') continue;
+          if (k === 'downtimeHours' && (v === '0' || v === 0)) continue;
+          if (k === 'overtimeHours' && (v === '0' || v === 0)) continue;
+          if (k === 'biogenicCo2' && (v === '0' || v === 0 || v === '0.00')) continue;
+          if (k === 'isBiomass' && v === 'false') continue;
+          if (k === 'createdAt' && item.entryMode === 'auto_daily') continue;
+          clean[k] = v;
+        }
+        return clean;
+      });
+    }
+
+    // Helper giải mã dữ liệu nhật ký hoạt động đảm bảo tương thích tuyệt đối
+    function decodeActivitiesData(storedData) {
+      if (!storedData) return [];
+      if (Array.isArray(storedData)) {
+        return storedData.map(item => ({
+          ...item,
+          manager: item.manager || 'Kỹ sư vận hành',
+          entryRole: item.entryRole || (item.isInvoice === 'true' ? 'accountant' : 'engineer'),
+          entryMode: item.entryMode || 'auto_daily',
+          isBaseline: item.isBaseline || 'false',
+          isInvoice: item.isInvoice || 'false',
+          isDowntime: item.isDowntime || 'false',
+          recordType: item.recordType || 'normal',
+          downtimeHours: item.downtimeHours || '0',
+          overtimeHours: item.overtimeHours || '0',
+          biogenicCo2: item.biogenicCo2 || '0.00',
+          isBiomass: item.isBiomass || 'false',
+          createdAt: item.createdAt || ''
+        }));
+      }
+      if (storedData._v === 2 && Array.isArray(storedData._r) && Array.isArray(storedData._d)) {
+        const d = storedData._d;
+        return storedData._r.map(row => ({
+          date: row[0] || '',
+          sourceId: row[1] || '',
+          sourceType: (row[2] !== '' && row[2] !== undefined) ? d[row[2]] : '',
+          sourceName: (row[3] !== '' && row[3] !== undefined) ? d[row[3]] : '',
+          amount: row[4] !== undefined ? row[4] : 0,
+          unit: (row[5] !== '' && row[5] !== undefined) ? d[row[5]] : '',
+          doc: (row[6] !== '' && row[6] !== undefined) ? d[row[6]] : '',
+          manager: (row[7] !== '' && row[7] !== undefined) ? d[row[7]] : 'Kỹ sư vận hành',
+          co2e: row[8] || '0.00',
+          biogenicCo2: row[9] || '0.00',
+          isBiomass: row[10] || 'false',
+          efName: (row[11] !== '' && row[11] !== undefined) ? d[row[11]] : '',
+          refName: (row[12] !== '' && row[12] !== undefined) ? d[row[12]] : '',
+          finalFactor: row[13] || '',
+          fileName: (row[14] !== '' && row[14] !== undefined) ? d[row[14]] : '',
+          createdAt: (row[15] !== '' && row[15] !== undefined) ? d[row[15]] : '',
+          entryRole: (row[16] !== '' && row[16] !== undefined) ? d[row[16]] : 'engineer',
+          entryMode: (row[17] !== '' && row[17] !== undefined) ? d[row[17]] : 'auto_daily',
+          isBaseline: row[18] || 'false',
+          isInvoice: row[19] || 'false',
+          isDowntime: row[20] || 'false',
+          recordType: (row[21] !== '' && row[21] !== undefined) ? d[row[21]] : 'normal',
+          stdHours: row[22] || '8',
+          downtimeHours: row[23] || '0',
+          overtimeHours: row[24] || '0'
+        }));
+      }
+      return [];
+    }
+
+    // Cơ chế lưu trữ an toàn chống tràn bộ nhớ (QuotaExceededError)
+    function safeSaveActivities(key, data) {
+      if (typeof localStorage === 'undefined') return;
+
+      // 1. Luôn tự động xóa các key rác hoặc key trùng lặp un-slugged chứa dấu '@'
+      try {
+        for (let i = localStorage.length - 1; i >= 0; i--) {
+          const k = localStorage.key(i);
+          if (k && k.startsWith('gs_data_') && (k.includes('@') || k.includes('..')) && k.endsWith('_activity')) {
+            localStorage.removeItem(k);
+          }
+        }
+      } catch (e) {}
+
+      // 2. Thử lưu dữ liệu (nếu dữ liệu < 3.2MB và < 2500 dòng để tránh nguy cơ tràn 5MB quota)
+      const rawPayload = JSON.stringify(data);
+      if (rawPayload.length < 3200000 && (!Array.isArray(data) || data.length < 2500)) {
+        try {
+          localStorage.setItem(key, rawPayload);
+          return;
+        } catch (err) {
+          console.warn('[Storage Quota] Lưu thông thường gặp lỗi, kích hoạt quy trình dọn dẹp dung lượng:', err);
+        }
+      }
+
+      // 3. Quy trình dọn dẹp khẩn cấp (Emergency Storage Cleanup):
+      // 3a. Dọn dẹp các tệp lớn base64 dataUrl còn kẹt trong gs_doc_* ở localStorage
+      try {
+        if (window.DocumentStorage && typeof window.DocumentStorage.cleanupStorageQuota === 'function') {
+          window.DocumentStorage.cleanupStorageQuota();
+        } else {
+          for (let i = localStorage.length - 1; i >= 0; i--) {
+            const k = localStorage.key(i);
+            if (k && k.startsWith('gs_doc_')) {
+              try {
+                const raw = localStorage.getItem(k);
+                if (raw && raw.includes('"dataUrl"')) {
+                  const docObj = JSON.parse(raw);
+                  if (docObj && docObj.dataUrl) {
+                    delete docObj.dataUrl;
+                    localStorage.setItem(k, JSON.stringify(docObj));
+                  }
+                }
+              } catch (dErr) {
+                localStorage.removeItem(k);
+              }
+            }
+          }
+        }
+      } catch (e) {}
+
+      // 3b. Xóa các key bản ghi thô trùng lặp còn sót lại
+      try {
+        const username = localStorage.getItem('gs_current_user') || 'guest';
+        const rawUser = username.trim();
+        if (rawUser.includes('@')) {
+          const branchEl = document.getElementById('branch-selector');
+          const branchName = (branchEl && branchEl.value) ? branchEl.value : 'main';
+          const branchKey = branchName.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '') || 'main';
+          localStorage.removeItem(`gs_data_${rawUser}_${branchKey}_activity`);
+          localStorage.removeItem(`gs_data_${rawUser}_tru_so_chinh_activity`);
+        }
+      } catch (e) {}
+
+      // Thử lại lần 2 sau khi dọn sạch bộ nhớ (nếu dữ liệu < 3.2MB)
+      if (rawPayload.length < 3200000 && (!Array.isArray(data) || data.length < 2500)) {
+        try {
+          localStorage.setItem(key, rawPayload);
+          return;
+        } catch (err2) {
+          console.warn('[Storage Quota] Sau khi dọn dẹp vẫn chưa đủ dung lượng, nén tinh gọn thuộc tính rỗng:', err2);
+        }
+      }
+
+      // 3c. Nén tinh gọn dữ liệu (compact attributes - lược bỏ trường rỗng và giá trị mặc định)
+      try {
+        const compactData = compactActivitiesData(data);
+        localStorage.setItem(key, JSON.stringify(compactData));
+        return;
+      } catch (err3) {
+        console.warn('[Storage Quota] Lưu compact thông thường vẫn đầy, kích hoạt nén từ điển cấp cao:', err3);
+      }
+
+      // 3d. Nén từ điển cấp cao (Dictionary Encoding) giúp tiết kiệm >80% dung lượng
+      try {
+        const dict = [];
+        const dictMap = new Map();
+        function getDictIdx(val) {
+          if (val === '' || val === null || val === undefined) return '';
+          let idx = dictMap.get(val);
+          if (idx === undefined) {
+            idx = dict.length;
+            dictMap.set(val, idx);
+            dict.push(val);
+          }
+          return idx;
+        }
+        const rows = data.map(r => [
+          r.date || '',
+          r.sourceId || '',
+          getDictIdx(r.sourceType),
+          getDictIdx(r.sourceName),
+          r.amount !== undefined ? r.amount : 0,
+          getDictIdx(r.unit),
+          getDictIdx(r.doc),
+          getDictIdx(r.manager),
+          r.co2e || '0.00',
+          r.biogenicCo2 || '0.00',
+          r.isBiomass || 'false',
+          getDictIdx(r.efName),
+          getDictIdx(r.refName),
+          r.finalFactor || '',
+          getDictIdx(r.fileName),
+          getDictIdx(r.createdAt),
+          getDictIdx(r.entryRole),
+          getDictIdx(r.entryMode),
+          r.isBaseline || 'false',
+          r.isInvoice || 'false',
+          r.isDowntime || 'false',
+          getDictIdx(r.recordType),
+          r.stdHours || '8',
+          r.downtimeHours || '0',
+          r.overtimeHours || '0'
+        ]);
+        const dictObj = { _v: 2, _d: dict, _r: rows };
+        localStorage.setItem(key, JSON.stringify(dictObj));
+        return;
+      } catch (err4) {
+        console.error('[Storage Quota] Lưu nén từ điển vẫn vượt quota 5MB của localStorage:', err4);
+        throw new Error('Dung lượng lưu trữ trình duyệt (localStorage) đã đầy. Dữ liệu đã được nén tối đa nhưng cần làm mới trang để giải phóng bộ nhớ đệm.');
+      }
     }
 
     function saveActivityList() {
@@ -399,10 +617,13 @@
 
       const slugKey = `gs_data_${userSlug}_${branchKey}_activity`;
       const rawKey = `gs_data_${rawUser}_${branchKey}_activity`;
-      localStorage.setItem(slugKey, JSON.stringify(data));
+      
+      // Xóa bản copy trùng lặp rawKey để giải phóng ngay ~2-3MB dung lượng
       if (rawKey !== slugKey) {
-        localStorage.setItem(rawKey, JSON.stringify(data));
+        try { localStorage.removeItem(rawKey); } catch (e) {}
       }
+
+      safeSaveActivities(slugKey, data);
 
       if (typeof renderMachineOverview === 'function') renderMachineOverview();
       if (typeof renderReconciliationSummary === 'function') renderReconciliationSummary();
@@ -441,8 +662,19 @@
       if (!stored && rawActKey !== normActKey) {
         stored = localStorage.getItem(rawActKey);
         if (stored) {
-          localStorage.setItem(normActKey, stored);
+          try {
+            safeSaveActivities(normActKey, JSON.parse(stored));
+            localStorage.removeItem(rawActKey);
+          } catch(e) {
+            try { localStorage.setItem(normActKey, stored); localStorage.removeItem(rawActKey); } catch(e2) {}
+          }
         }
+      } else if (stored && rawActKey !== normActKey) {
+        try {
+          if (localStorage.getItem(rawActKey)) {
+            localStorage.removeItem(rawActKey);
+          }
+        } catch(e) {}
       }
 
       // Tối ưu hiệu năng: Nếu dữ liệu không đổi và bảng đã có dòng, chỉ lọc lại nhanh thay vì vẽ lại toàn bộ DOM
@@ -482,7 +714,8 @@
 
       if (!stored) return;
       try {
-        let data = JSON.parse(stored);
+        let rawParsed = JSON.parse(stored);
+        let data = decodeActivitiesData(rawParsed);
         if (data && data.length > 0) {
           // Tự động phục hồi và phân định rạch ròi:
           let needsSave = false;
@@ -582,7 +815,7 @@
 
           if (needsSave) {
             try {
-              localStorage.setItem(getBranchStorageKey('activity'), JSON.stringify(data));
+              safeSaveActivities(getBranchStorageKey('activity'), data);
             } catch(e) {}
           }
 
@@ -1820,13 +2053,19 @@
         const eqStr = (sourceName || '').toLowerCase();
         const isWW = typeStr.includes('nước thải') || typeStr.includes('tự hoại') || eqStr.includes('nước thải') || eqStr.includes('tự hoại') || eqStr.includes('hiếu khí') || eqStr.includes('kỵ khí') || eqStr.includes('bùn') || typeStr.includes('waste');
         
+        const unitLower = (unit || '').toLowerCase();
+        const isEnergyOrElectricity = unitLower.includes('kwh') || unitLower.includes('wh') || unitLower.includes('mwh') ||
+                                      unitLower.includes('lít') || unitLower.includes('lit') || unitLower === 'l' ||
+                                      unitLower.includes('m3') || unitLower.includes('m³') ||
+                                      eqStr.includes('tiêu thụ điện') || typeStr.includes('tiêu thụ điện');
+
         const isProcess = (selectedOption?.dataset?.isProcessEmission === 'true') ||
-                          typeStr.includes('quá trình công nghiệp') ||
-                          typeStr.includes('thổi oxy') ||
-                          Boolean(selectedOption?.dataset?.productionUnit) ||
-                          (modalTitle && modalTitle.innerText.includes('Chốt sản lượng')) ||
-                          eqStr.includes('lò hồ quang điện') ||
-                          eqStr.includes('quá trình');
+                          (!isEnergyOrElectricity && (
+                            (typeStr.includes('quá trình công nghiệp') && !typeStr.includes('điện')) ||
+                            (Boolean(selectedOption?.dataset?.productionUnit) && (unitLower.includes('tấn') || unitLower.includes('kg'))) ||
+                            (modalTitle && modalTitle.innerText.includes('Chốt sản lượng')) ||
+                            (eqStr.includes('quá trình') && !eqStr.includes('điện') && !eqStr.includes('kwh'))
+                          ));
 
         const isBiomass = isBiomassFromOpt ||
                           (fuelItem && (fuelItem.isBiogenic || fuelItem.biogenic_factor)) ||
@@ -1891,11 +2130,10 @@
           }
         } 
         // ƯU TIÊN 2: PHÁT THẢI QUÁ TRÌNH CÔNG NGHIỆP (IPPU)
-        else if (!fuelItem?.ncv && (
+        else if (!isWW && !fuelItem?.ncv && !isEnergyOrElectricity && (
           (selectedOption?.dataset?.isProcessEmission === 'true') ||
-          typeStr.includes('quá trình công nghiệp') ||
-          typeStr.includes('thổi oxy') ||
-          Boolean(selectedOption?.dataset?.productionUnit)
+          (typeStr.includes('quá trình công nghiệp') && !typeStr.includes('điện')) ||
+          (Boolean(selectedOption?.dataset?.productionUnit) && (unitLower.includes('tấn') || unitLower.includes('kg')))
         )) {
           let efNum = parseNum(customFactorStr);
           if (!efNum && factor) efNum = parseNum(factor);
@@ -2216,7 +2454,7 @@
       }
 
       tr.innerHTML = `
-        <td style="padding:0.45rem 0.55rem; white-space: nowrap; font-size: 0.78rem;">${dateDisplay}</td>
+        <td style="padding:0.45rem 0.55rem; white-space: nowrap; font-size: 0.78rem; overflow: visible;">${dateDisplay}</td>
         <td style="padding:0.45rem 0.55rem; font-size: 0.78rem; font-weight: 500;">${data.sourceName}</td>
         <td style="padding:0.45rem 0.55rem; text-align: right; font-size: 0.78rem; color: #475569;">
           ${data.finalFactor ? parseFloat(Number(data.finalFactor).toFixed(4)) : '0'}
@@ -2253,7 +2491,7 @@
         });
       }
 
-      tr.querySelector('.btn-edit-act').addEventListener('click', () => {
+      tr.querySelector('.btn-edit-act')?.addEventListener('click', () => {
         const perm = getEditPermission();
         if (!perm.allowed) {
           alert(perm.msg);
@@ -2263,17 +2501,28 @@
 
         const docLower = (data.doc || '').toLowerCase();
         const typeLower = (data.sourceType || '').toLowerCase();
+        const nameLower = (data.sourceName || '').toLowerCase();
         const unitLower = (data.unit || '').toLowerCase();
-        const isRowProcess = unitLower.includes('tấn') ||
-                             typeLower.includes('quá trình') ||
-                             typeLower.includes('thổi oxy') ||
-                             typeLower.includes('luyện') ||
-                             data.recordType === 'production' ||
-                             data.recordType === 'actual_production' ||
-                             data.recordType === 'baseline_production' ||
-                             docLower.includes('công nghệ') ||
-                             docLower.includes('phiếu cân') ||
-                             docLower.includes('sản lượng');
+
+        // 1. Kiểm tra loại trừ: Nếu đơn vị là năng lượng / điện / nhiên liệu (kWh, MWh, lít, m3) thì TUYỆT ĐỐI KHÔNG phải IPPU
+        const isEnergyOrFuel = unitLower.includes('kwh') || unitLower.includes('wh') || unitLower.includes('mwh') ||
+                               unitLower.includes('lít') || unitLower.includes('lit') || unitLower === 'l' ||
+                               unitLower.includes('m3') || unitLower.includes('m³') ||
+                               nameLower.includes('tiêu thụ điện') || typeLower.includes('tiêu thụ điện') ||
+                               (nameLower.includes('kwh') && !nameLower.includes('ippu'));
+
+        // 2. Chỉ coi là dòng phát thải quá trình IPPU khi không phải điện/nhiên liệu và mang đặc trưng IPPU sản phẩm
+        const isRowProcess = !isEnergyOrFuel && (
+          data.isProcessEmission === 'true' ||
+          data.recordType === 'production' ||
+          data.recordType === 'actual_production' ||
+          data.recordType === 'baseline_production' ||
+          ((unitLower.includes('tấn') || unitLower.includes('tan') || unitLower === 't') && (
+            typeLower.includes('quá trình') || typeLower.includes('công nghệ') ||
+            nameLower.includes('ippu') || nameLower.includes('quá trình') ||
+            docLower.includes('công nghệ') || docLower.includes('phiếu cân')
+          ))
+        );
         
         // Open modal for this row without permanently overwriting user's page filter
         const rowType = data.sourceType || '';
@@ -2457,7 +2706,7 @@
         }, 50);
       });
 
-      tr.querySelector('.btn-delete-act').addEventListener('click', () => {
+      tr.querySelector('.btn-delete-act')?.addEventListener('click', () => {
         const perm = getEditPermission();
         if (!perm.allowed) {
           alert(perm.msg);
@@ -2577,7 +2826,7 @@
         });
         
         if (changed) {
-            localStorage.setItem(storageKey, JSON.stringify(activities));
+            safeSaveActivities(storageKey, activities);
             loadActivityList();
             if (typeof updateDashboard === 'function') updateDashboard();
             alert(`Thành công! Đã cập nhật hệ thống và tính toán lại toàn bộ dữ liệu theo chuẩn ${targetAR}.`);
@@ -3448,14 +3697,36 @@
             }
           }
 
-          const sourceDisplayName = src.eq ? `${src.type} - ${src.eq}` : src.type;
+          const srcEqClean = (src.eq || '').trim();
+          const srcTypeClean = (src.type || '').trim();
+          const sourceDisplayName = (srcEqClean && srcTypeClean && srcEqClean !== srcTypeClean && !srcEqClean.toLowerCase().includes(srcTypeClean.toLowerCase()) && !srcTypeClean.toLowerCase().includes(srcEqClean.toLowerCase()))
+            ? `${srcTypeClean} - ${srcEqClean}`
+            : (srcEqClean || srcTypeClean);
+
+          const isFugitive = (src.category && (src.category.includes('rò rỉ') || src.category.includes('thất thoát'))) ||
+                             (src.type && (src.type.toLowerCase().includes('chiller') || src.type.toLowerCase().includes('chữa cháy') || src.type.toLowerCase().includes('pccc'))) ||
+                             Boolean(src.refrigerant);
+          const isWastewater = (src.category && src.category.toLowerCase().includes('nước thải')) ||
+                               (src.type && src.type.toLowerCase().includes('nước thải'));
 
           for (let d = 1; d <= daysInThisMonth; d++) {
             const dateObj = new Date(parseInt(curYear), m - 1, d);
             const dayOfWeek = dateObj.getDay();
 
-            if (dWeek <= 5 && (dayOfWeek === 0 || dayOfWeek === 6)) continue;
-            if (dWeek === 6 && dayOfWeek === 0) continue;
+            if (isFugitive) {
+              if (d !== 15 || (m !== 6 && m !== 12)) continue;
+              docStr = 'Kiểm định & bảo trì định kỳ';
+            } else if (isWastewater) {
+              if (d !== 28) continue;
+              docStr = 'Quan trắc lưu lượng nước thải tháng';
+            } else {
+              if (dWeek === 1 && dayOfWeek !== 1) continue;
+              if (dWeek === 2 && dayOfWeek !== 2 && dayOfWeek !== 4) continue;
+              if (dWeek === 3 && dayOfWeek !== 1 && dayOfWeek !== 3 && dayOfWeek !== 5) continue;
+              if (dWeek === 4 && (dayOfWeek === 0 || dayOfWeek === 5 || dayOfWeek === 6)) continue;
+              if (dWeek <= 5 && (dayOfWeek === 0 || dayOfWeek === 6)) continue;
+              if (dWeek === 6 && dayOfWeek === 0) continue;
+            }
 
             const dStr = String(d).padStart(2, '0');
             const dateStr = `${curYear}-${mStr}-${dStr}`;
@@ -3496,9 +3767,13 @@
 
       activities.sort((a, b) => (a.date || '').localeCompare(b.date || ''));
 
-      localStorage.setItem(normActKey, JSON.stringify(activities));
+      if (typeof safeSaveActivities === 'function') {
+        safeSaveActivities(normActKey, activities);
+      } else {
+        localStorage.setItem(normActKey, JSON.stringify(activities));
+      }
       if (rawActKey !== normActKey) {
-        localStorage.setItem(rawActKey, JSON.stringify(activities));
+        try { localStorage.removeItem(rawActKey); } catch (e) {}
       }
       loadActivityList();
       const viewDash = document.getElementById('view-dashboard');
@@ -3615,9 +3890,13 @@
       });
 
       if (updatedCount > 0) {
-        localStorage.setItem(normActKey, JSON.stringify(actList));
+        if (typeof safeSaveActivities === 'function') {
+          safeSaveActivities(normActKey, actList);
+        } else {
+          localStorage.setItem(normActKey, JSON.stringify(actList));
+        }
         if (rawActKey !== normActKey) {
-          localStorage.setItem(rawActKey, JSON.stringify(actList));
+          try { localStorage.removeItem(rawActKey); } catch (e) {}
         }
         // Cập nhật trực tiếp lên DOM nếu bảng Dữ liệu hoạt động đang hiển thị
         const rows = document.querySelectorAll('#activity-tbody tr:not(#no-activity-row)');
@@ -3812,9 +4091,13 @@
 
       if (!confirm(confirmMsg)) return;
 
-      localStorage.setItem(normActKey, JSON.stringify(remaining));
+      if (typeof safeSaveActivities === 'function') {
+        safeSaveActivities(normActKey, remaining);
+      } else {
+        localStorage.setItem(normActKey, JSON.stringify(remaining));
+      }
       if (rawActKey !== normActKey) {
-        localStorage.setItem(rawActKey, JSON.stringify(remaining));
+        try { localStorage.removeItem(rawActKey); } catch (e) {}
       }
       loadActivityList();
       if (typeof renderMachineOverview === 'function') renderMachineOverview();
@@ -4053,6 +4336,8 @@
     window.isVnPublicHoliday = isVnPublicHoliday;
     window.removeActivityDaysOff = removeActivityDaysOff;
     window.autoGenerateDailyOperationalRecords = autoGenerateDailyOperationalRecords;
+    window.decodeActivitiesData = decodeActivitiesData;
+    window.compactActivitiesData = compactActivitiesData;
 
     window.toggleActivityTableHeight = function() {
       const now = Date.now();
@@ -4094,9 +4379,13 @@
       menu.style.display = isOpen ? 'none' : 'block';
     };
 
+    let _lastFilterToggle = 0;
     window.toggleActivityCustomFilter = function(e) {
       if (e && typeof e.stopPropagation === 'function') e.stopPropagation();
-      const dropdown = document.getElementById('activity-custom-filter-dropdown');
+      const now = Date.now();
+      if (now - _lastFilterToggle < 300) return;
+      _lastFilterToggle = now;
+      const dropdown = document.getElementById('activity-custom-filter-dropdown') || actFilterDropdown;
       if (!dropdown) return;
       dropdown.classList.toggle('open');
       if (dropdown.classList.contains('open') && typeof renderActCol1 === 'function') {

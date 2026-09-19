@@ -134,14 +134,15 @@
       text-overflow: ellipsis;
       word-break: break-word;
     }
-    #activity-table-card th:nth-child(1), #activity-table-card td:nth-child(1) { width: 105px; }
-    #activity-table-card th:nth-child(2), #activity-table-card td:nth-child(2) { width: 18%; }
+    #activity-table-card th:nth-child(1), #activity-table-card td:nth-child(1) { width: 138px; }
+    #activity-table-card td:nth-child(1) { overflow: visible; }
+    #activity-table-card th:nth-child(2), #activity-table-card td:nth-child(2) { width: 16%; }
     #activity-table-card th:nth-child(3), #activity-table-card td:nth-child(3) { width: 7%; }
     #activity-table-card th:nth-child(4), #activity-table-card td:nth-child(4) { width: 8%; }
     #activity-table-card th:nth-child(5), #activity-table-card td:nth-child(5) { width: 6%; }
     #activity-table-card th:nth-child(6), #activity-table-card td:nth-child(6) { width: 11%; }
     #activity-table-card th:nth-child(7), #activity-table-card td:nth-child(7) { width: 9%; }
-    #activity-table-card th:nth-child(8), #activity-table-card td:nth-child(8) { width: 14%; }
+    #activity-table-card th:nth-child(8), #activity-table-card td:nth-child(8) { width: 13%; }
     #activity-table-card th:nth-child(9), #activity-table-card td:nth-child(9) { width: 9%; }
     #activity-table-card th:nth-child(10), #activity-table-card td:nth-child(10) { width: 9%; }
     #activity-table-card th:nth-child(11), #activity-table-card td:nth-child(11) { width: 68px; }
@@ -198,7 +199,8 @@
     /* Custom Cascading Dropdown Styles */
     .custom-select-container {
       position: relative;
-      width: 400px;
+      width: 100%;
+      max-width: 400px;
     }
     .custom-select-input {
       width: 100%;
@@ -1027,9 +1029,9 @@
             <h2 class="page-title">Thiết bị</h2>
            
            <div class="equipment-toolbar" style="display: flex; gap: 0.75rem; align-items: center; justify-content: space-between; flex-wrap: wrap; margin-bottom: 1.25rem;">
-             <div style="display: flex; gap: 0.75rem; align-items: center; flex: 1; min-width: 320px;">
+             <div style="display: flex; gap: 0.75rem; align-items: center; min-width: 240px; max-width: 400px; flex: 1;">
                <div style="font-weight: 500; color: #555; white-space: nowrap;">Nguồn phát thải:</div>
-               <div class="custom-select-container" style="flex: 1; max-width: 380px;">
+               <div class="custom-select-container" style="flex: 1; min-width: 160px; max-width: 300px; position: relative;">
                  <div class="custom-select-input" id="custom-source-input">Vui lòng chọn nguồn phát thải</div>
                  <div class="custom-select-dropdown" id="custom-source-dropdown">
                    <div class="dropdown-col" id="col-1"></div>
@@ -1040,7 +1042,7 @@
                <input type="hidden" id="source-select" value="">
              </div>
 
-             <div style="display: flex; gap: 0.5rem; align-items: center;">
+             <div style="display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap;">
                <button type="button" id="btn-download-eq-template" class="btn btn-secondary" style="background: #ffffff; color: var(--color-text-primary); border: 1px solid var(--color-border); font-size: 0.85rem; padding: 0.5rem 0.9rem; border-radius: 6px; cursor: pointer;" title="Tải file Excel mẫu danh mục thiết bị">
                  Tải file mẫu
                </button>
@@ -6247,6 +6249,7 @@
             if (targetActivities.length === 0) {
               try {
                 targetActivities = JSON.parse(localStorage.getItem(getBranchStorageKey('activity')) || '[]');
+                if (typeof window.decodeActivitiesData === 'function') targetActivities = window.decodeActivitiesData(targetActivities);
               } catch(e) {}
             }
 
@@ -6352,7 +6355,10 @@
             }
 
             if (allActs.length === 0) {
-              try { allActs = JSON.parse(localStorage.getItem(getBranchStorageKey('activity')) || '[]'); } catch(e) {}
+              try { 
+                allActs = JSON.parse(localStorage.getItem(getBranchStorageKey('activity')) || '[]'); 
+                if (typeof window.decodeActivitiesData === 'function') allActs = window.decodeActivitiesData(allActs);
+              } catch(e) {}
             }
 
             const yearActs = allActs.filter(a => !a.date || a.date.startsWith(selectedYear));
@@ -7703,7 +7709,7 @@
           }
         }
       } else {
-        btnReview.innerHTML = `<span>Đối soát thiết bị</span><span style="background: #dcfce7; color: #15803d; padding: 1px 7px; border-radius: 10px; font-size: 0.72rem; font-weight: 600; margin-left: 4px;">100% Khớp</span>`;
+        btnReview.innerHTML = '<span>Đối soát thiết bị</span>';
         btnReview.style.background = '#f0fdf4';
         btnReview.style.color = '#166534';
         btnReview.style.borderColor = '#bbf7d0';

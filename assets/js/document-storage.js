@@ -133,18 +133,14 @@
         }
       }
 
-      // 2. Dự phòng trong LocalStorage (nếu tệp nhỏ < 1.5MB)
+      // 2. Dự phòng trong LocalStorage (lưu metadata; chỉ kèm dataUrl nếu tệp nhỏ < 50KB để không chiếm dụng hạn ngạch 5MB)
       try {
-        if (dataUrl && dataUrl.length < 1500000) {
-          localStorage.setItem(`gs_doc_${docId}`, JSON.stringify({
-            docId, fileName, fileType, fileSize, dataUrl, fileUrl, createdAt: docRecord.createdAt
-          }));
-        } else {
-          // Lưu metadata không có dataUrl lớn để không vượt quota 5MB
-          localStorage.setItem(`gs_doc_${docId}`, JSON.stringify({
-            docId, fileName, fileType, fileSize, fileUrl, createdAt: docRecord.createdAt
-          }));
-        }
+        const canIncludeData = dataUrl && dataUrl.length < 50000;
+        const payload = {
+          docId, fileName, fileType, fileSize, fileUrl, createdAt: docRecord.createdAt
+        };
+        if (canIncludeData) payload.dataUrl = dataUrl;
+        localStorage.setItem(`gs_doc_${docId}`, JSON.stringify(payload));
       } catch (lsErr) {
         console.warn('[DocumentStorage] Quota LocalStorage đầy, tệp đã lưu trong IndexedDB:', lsErr);
       }
@@ -335,6 +331,35 @@
     },
 
     /**
+     * Dọn dẹp các tệp base64 lớn bị lưu sót trong LocalStorage để giải phóng dung lượng quota
+     */
+    cleanupStorageQuota() {
+      try {
+        if (typeof localStorage === 'undefined') return 0;
+        let freedCount = 0;
+        for (let i = localStorage.length - 1; i >= 0; i--) {
+          const k = localStorage.key(i);
+          if (k && k.startsWith('gs_doc_')) {
+            try {
+              const raw = localStorage.getItem(k);
+              if (raw && raw.includes('"dataUrl"')) {
+                const docObj = JSON.parse(raw);
+                if (docObj && docObj.dataUrl && docObj.dataUrl.length > 50000) {
+                  delete docObj.dataUrl;
+                  localStorage.setItem(k, JSON.stringify(docObj));
+                  freedCount++;
+                }
+              }
+            } catch (e) {}
+          }
+        }
+        return freedCount;
+      } catch (e) {
+        return 0;
+      }
+    },
+
+    /**
      * Đóng modal xem chứng từ
      */
     closeViewer() {
@@ -345,6 +370,11 @@
       if (bodyEl) bodyEl.innerHTML = '';
     }
   };
+
+  // Tự động dọn dẹp dung lượng LocalStorage ngay khi nạp module
+  try {
+    DocumentStorage.cleanupStorageQuota();
+  } catch(e) {}
 
   // Đăng ký toàn cục
   window.DocumentStorage = DocumentStorage;

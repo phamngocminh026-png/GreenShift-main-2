@@ -223,10 +223,13 @@
 
     let totalSynced = 0;
     branchKeys.forEach(bKey => {
-      const storageKey = `gs_data_${currentUser}_${bKey}_activity`;
+      const userSlug = (currentUser || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '') || 'guest';
+      const normKey = `gs_data_${userSlug}_${bKey}_activity`;
+      const rawKey = `gs_data_${currentUser}_${bKey}_activity`;
+      const storageKey = normKey;
       let activities = [];
       try {
-        activities = JSON.parse(localStorage.getItem(storageKey) || '[]');
+        activities = JSON.parse(localStorage.getItem(normKey) || localStorage.getItem(rawKey) || '[]');
       } catch (e) {}
 
       let changed = false;
@@ -297,7 +300,10 @@
       });
 
       if (changed) {
-        localStorage.setItem(storageKey, JSON.stringify(activities));
+        localStorage.setItem(normKey, JSON.stringify(activities));
+        if (rawKey !== normKey) {
+          try { localStorage.removeItem(rawKey); } catch (e) {}
+        }
       }
     });
 

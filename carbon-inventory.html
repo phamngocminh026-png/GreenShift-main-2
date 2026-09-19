@@ -1066,7 +1066,15 @@
              </button>
            </div>
 
-           <div class="table-card table-container">
+           <div id="smart-eq-alert-banner" style="display: none; background: #fffbeb; border: 1px solid #fef3c7; border-left: 4px solid #f59e0b; border-radius: 6px; padding: 0.75rem 1rem; margin-top: 0.75rem; margin-bottom: 0.75rem; align-items: center; justify-content: space-between; gap: 1rem;">
+              <div style="display: flex; align-items: center; gap: 8px; font-size: 0.85rem; color: #92400e;">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0; color: #d97706;"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"></path><line x1="12" y1="9" x2="12" y2="13"></line><line x1="12" y1="17" x2="12.01" y2="17"></line></svg>
+                <span id="smart-eq-alert-text">Hệ thống phát hiện thiết bị chưa khớp cơ sở dữ liệu chuẩn hoặc cần xác nhận danh mục.</span>
+              </div>
+              <button type="button" onclick="document.getElementById('btn-smart-mapping-review').click()" class="btn btn-secondary" style="background: #ffffff; border: 1px solid #d97706; color: #b45309; font-weight: 600; font-size: 0.8rem; padding: 0.35rem 0.85rem; border-radius: 4px; cursor: pointer; white-space: nowrap;">Đối soát ngay &rarr;</button>
+            </div>
+
+            <div class="table-card table-container">
             <table>
               <thead>
                 <tr>
@@ -1536,7 +1544,14 @@
           </div>
           <div style="flex: 1;">
             <label style="font-size: 0.8rem; font-weight: 600;">Đơn vị <span style="color: red;">*</span></label>
-            <input type="text" id="activity-unit" class="form-control" placeholder="Lít, kWh..." required style="font-size: 0.85rem;">
+            <input type="text" id="activity-unit" class="form-control" placeholder="Lít, kWh..." required style="font-size: 0.85rem;" list="activity-unit-list">
+            <datalist id="activity-unit-list">
+              <option value="lít"></option>
+              <option value="kWh"></option>
+              <option value="kg"></option>
+              <option value="tấn"></option>
+              <option value="m³"></option>
+            </datalist>
           </div>
         </div>
         
@@ -2236,6 +2251,9 @@
           }
           if (typeof updateEquipmentTemplateButtonLabel === 'function') {
             try { updateEquipmentTemplateButtonLabel(); } catch(e) {}
+          }
+          if (typeof window.updateEquipmentReconciliationBadge === 'function') {
+            try { window.updateEquipmentReconciliationBadge(); } catch(e) {}
           }
         } else if (target === 'view-source') {
           if (typeof loadSourceList === 'function') {
@@ -7639,6 +7657,60 @@
       });
     }
 
+    // Update Equipment Reconciliation Badge & Notification Banner
+    window.updateEquipmentReconciliationBadge = function() {
+      const btnReview = document.getElementById('btn-smart-mapping-review');
+      const alertBanner = document.getElementById('smart-eq-alert-banner');
+      const alertText = document.getElementById('smart-eq-alert-text');
+      if (!btnReview) return;
+
+      let currentEqs = [];
+      try {
+        const stored = localStorage.getItem(getBranchStorageKey('equipment'));
+        if (stored) currentEqs = JSON.parse(stored);
+      } catch (e) {}
+
+      if (!currentEqs || currentEqs.length === 0) {
+        btnReview.innerHTML = '<span>Đối soát thiết bị</span>';
+        btnReview.style.background = '#f0fdf4';
+        btnReview.style.color = '#166534';
+        btnReview.style.borderColor = '#bbf7d0';
+        if (alertBanner) alertBanner.style.display = 'none';
+        return;
+      }
+
+      let needReviewCount = 0;
+      currentEqs.forEach(eq => {
+        const rawName = eq.name || eq.type || '';
+        const matchResult = (typeof window.findStandardEquipmentSmart === 'function')
+          ? window.findStandardEquipmentSmart(rawName, eq.category)
+          : null;
+        const conf = matchResult ? matchResult.confidence : 0;
+        if (conf < 0.85) {
+          needReviewCount++;
+        }
+      });
+
+      if (needReviewCount > 0) {
+        btnReview.innerHTML = `<span>Đối soát thiết bị</span><span style="background: #ef4444; color: #ffffff; padding: 1px 7px; border-radius: 10px; font-size: 0.72rem; font-weight: 700; margin-left: 4px;">${needReviewCount} cần kiểm tra</span>`;
+        btnReview.style.background = '#fff7ed';
+        btnReview.style.color = '#c2410c';
+        btnReview.style.borderColor = '#fdba74';
+        if (alertBanner) {
+          alertBanner.style.display = 'flex';
+          if (alertText) {
+            alertText.innerHTML = `Hệ thống phát hiện <strong>${needReviewCount}</strong> thiết bị chưa khớp CSDL chuẩn hoặc cần xác nhận lại danh mục. Doanh nghiệp vui lòng đối soát để đảm bảo tính toán phát thải chính xác.`;
+          }
+        }
+      } else {
+        btnReview.innerHTML = `<span>Đối soát thiết bị</span><span style="background: #dcfce7; color: #15803d; padding: 1px 7px; border-radius: 10px; font-size: 0.72rem; font-weight: 600; margin-left: 4px;">100% Khớp</span>`;
+        btnReview.style.background = '#f0fdf4';
+        btnReview.style.color = '#166534';
+        btnReview.style.borderColor = '#bbf7d0';
+        if (alertBanner) alertBanner.style.display = 'none';
+      }
+    };
+
     // Review button on toolbar (#btn-smart-mapping-review)
     const btnReview = document.getElementById('btn-smart-mapping-review');
     if (btnReview) {
@@ -7683,9 +7755,19 @@
           if (typeof executeCommitImport === 'function') {
             executeCommitImport(reconciledRows);
           }
+          if (typeof window.updateEquipmentReconciliationBadge === 'function') {
+            window.updateEquipmentReconciliationBadge();
+          }
         }, { title: 'Đối soát & Chuẩn hóa Danh mục Thiết bị Cơ sở' });
       });
     }
+
+    // Trigger initial badge check
+    setTimeout(() => {
+      if (typeof window.updateEquipmentReconciliationBadge === 'function') {
+        window.updateEquipmentReconciliationBadge();
+      }
+    }, 500);
   })();
   </script>
   <script src="assets/js/page-transition.js"></script>

@@ -847,12 +847,13 @@
       const selected = sourceSelect.options[sourceSelect.selectedIndex];
       const wwGroup = document.getElementById('activity-ww-group');
       
-      if (!selected.value) {
+      if (!selected || !selected.value) {
         infoBox.style.display = 'none';
         if(wwGroup) wwGroup.style.display = 'none';
         return;
       }
-      
+
+      const currentRole = localStorage.getItem('gs_user_role') || 'engineer';
       const typeStr = (selected.dataset.type || '').toLowerCase();
       const eqStr = (selected.text || '').toLowerCase();
       const isWW = typeStr.includes('nước thải') || typeStr.includes('tự hoại') || eqStr.includes('nước thải') || eqStr.includes('tự hoại') || eqStr.includes('hiếu khí') || eqStr.includes('kỵ khí') || eqStr.includes('bùn') || typeStr.includes('waste');
@@ -865,7 +866,7 @@
           wwGroup.style.display = 'none';
           if (btnCalcTow) btnCalcTow.style.display = 'none';
           if (amountLabel) amountLabel.innerHTML = `Sản lượng sản xuất (${selected.dataset.productName || 'phôi thép / sản phẩm'}) <span style="color: red;">*</span>`;
-        } else if (curRole === 'accountant') {
+        } else if (currentRole === 'accountant') {
           wwGroup.style.display = 'none';
           if (btnCalcTow) btnCalcTow.style.display = 'none';
           if (amountLabel) amountLabel.innerHTML = 'Số lượng tiêu thụ trên hóa đơn <span style="color: red;">*</span>';
@@ -916,33 +917,35 @@
         const isProcess = selected.dataset.isProcessEmission === 'true' || typeLower.includes('quá trình công nghiệp') || Boolean(selected.dataset.productionUnit);
         const isElectric = typeLower.includes('điện') || eqLower.includes('điện') || eqLower.includes('chiller') || eqLower.includes('làm mát') || eqLower.includes('máy lạnh') || eqLower.includes('điều hòa') || eqLower.includes('nén khí') || opCapUnit.includes('kw');
 
-        let targetUnit = '';
-        if (isProcess) {
-          targetUnit = selected.dataset.productionUnit || 'tấn';
-        } else if (isElectric) {
-          targetUnit = 'kWh';
-        } else if (typeLower.includes('rò rỉ') || typeLower.includes('môi chất') || selected.dataset.refrigerant) {
-          targetUnit = 'kg';
-        } else if (typeLower.includes('gas') || typeLower.includes('lpg')) {
-          targetUnit = 'kg';
-        } else if (typeLower.includes('cng') || typeLower.includes('biogas')) {
-          targetUnit = 'm³';
-        } else if (selected.dataset.efUnit) {
-          targetUnit = normalizeConsumptionUnit(selected.dataset.efUnit, selected.dataset.type);
-        } else if (selected.dataset.opCapUnit) {
-          targetUnit = normalizeConsumptionUnit(selected.dataset.opCapUnit, selected.dataset.type);
-        } else if (cUnit || unit) {
-          const uMatch = (cUnit || unit).split('/')[1];
-          if (uMatch) targetUnit = uMatch;
+        let targetUnit = selected.dataset.unit || '';
+        if (!targetUnit) {
+          if (isProcess) {
+            targetUnit = selected.dataset.productionUnit || 'tấn';
+          } else if (isElectric) {
+            targetUnit = 'kWh';
+          } else if (typeLower.includes('rò rỉ') || typeLower.includes('môi chất') || selected.dataset.refrigerant) {
+            targetUnit = 'kg';
+          } else if (typeLower.includes('gas') || typeLower.includes('lpg') || eqLower.includes('lpg')) {
+            targetUnit = 'kg';
+          } else if (typeLower.includes('than') || eqLower.includes('than đá') || eqLower.includes('than antraxit')) {
+            targetUnit = 'tấn';
+          } else if (typeLower.includes('cng') || typeLower.includes('biogas') || eqLower.includes('khí tự nhiên')) {
+            targetUnit = 'm³';
+          } else if (selected.dataset.efUnit) {
+            targetUnit = normalizeConsumptionUnit(selected.dataset.efUnit, selected.dataset.type);
+          } else if (selected.dataset.opCapUnit) {
+            targetUnit = normalizeConsumptionUnit(selected.dataset.opCapUnit, selected.dataset.type);
+          } else if (cUnit || unit) {
+            const uMatch = (cUnit || unit).split('/')[1];
+            if (uMatch) targetUnit = uMatch;
+          }
         }
 
         if (!targetUnit) {
-          targetUnit = isElectric ? 'kWh' : 'lít';
+          targetUnit = isElectric ? 'kWh' : ((eqLower.includes('dầu') || eqLower.includes('xăng')) ? 'lít' : 'lít');
         }
 
-        if (!currentEditingRow || !unitInput.value) {
-          unitInput.value = targetUnit;
-        }
+        unitInput.value = targetUnit;
       }
 
       // Cập nhật đơn vị vào nhãn hiển thị định mức theo giờ
@@ -960,7 +963,6 @@
       const annualEstQty = selected.dataset.annualEstQty || '';
       const annualEstEmissions = selected.dataset.annualEstEmissions || '';
       const meterMult = selected.dataset.meterMult || '1';
-      const currentRole = localStorage.getItem('gs_user_role') || 'engineer';
       const isProcess = selected.dataset.isProcessEmission === 'true' ||
                         (selected.dataset.type || '').toLowerCase().includes('quá trình công nghiệp') ||
                         (selected.dataset.type || '').toLowerCase().includes('thổi oxy') ||
@@ -1761,299 +1763,315 @@
       });
     }
 
-    if (btnSaveActivity) btnSaveActivity.addEventListener('click', () => {
-      if (!activityForm.checkValidity()) {
-        activityForm.reportValidity();
-        return;
-      }
-
-      const date = document.getElementById('activity-date').value;
-      const sourceId = sourceSelect.value;
-      const sourceName = sourceSelect.options[sourceSelect.selectedIndex].text;
-      const rawAmtStr = String(document.getElementById('activity-amount')?.value || '0').replace(',', '.');
-      const parseNum = (typeof window !== 'undefined' && typeof window.parseVnNumber === 'function') ? window.parseVnNumber : parseFloat;
-      const amount = parseNum(document.getElementById('activity-amount')?.value || rawAmtStr);
-      const unit = document.getElementById('activity-unit').value;
-      
-      const doc = document.getElementById('activity-doc').value;
-      const manager = document.getElementById('activity-manager').value;
-      
-      const fileInput = document.getElementById('activity-file');
-      const hasNewFile = fileInput.files && fileInput.files.length > 0;
-      const fileName = hasNewFile ? fileInput.files[0].name : (currentEditingRow ? (currentEditingRow.dataset.fileName || '') : '');
-      const docId = (hasNewFile && window._currentUploadedDoc)
-        ? (window._currentUploadedDoc.docId || '')
-        : (currentEditingRow ? (currentEditingRow.dataset.docId || '') : (window._currentUploadedDoc ? window._currentUploadedDoc.docId || '' : ''));
-      const fileUrl = (hasNewFile && window._currentUploadedDoc)
-        ? (window._currentUploadedDoc.fileUrl || '')
-        : (currentEditingRow ? (currentEditingRow.dataset.fileUrl || '') : (window._currentUploadedDoc ? window._currentUploadedDoc.fileUrl || '' : ''));
-      const fileType = (hasNewFile && window._currentUploadedDoc)
-        ? (window._currentUploadedDoc.fileType || '')
-        : (currentEditingRow ? (currentEditingRow.dataset.fileType || '') : (window._currentUploadedDoc ? window._currentUploadedDoc.fileType || '' : ''));
-      
-      const sourceType = sourceSelect.options[sourceSelect.selectedIndex]?.dataset?.type || '';
-      const efName = sourceSelect.options[sourceSelect.selectedIndex]?.dataset?.ef || '';
-      const refName = sourceSelect.options[sourceSelect.selectedIndex]?.dataset?.refrigerant || '';
-      const customFactorStr = sourceSelect.options[sourceSelect.selectedIndex]?.dataset?.efFactor || '';
-      const reliability = sourceSelect.options[sourceSelect.selectedIndex]?.dataset?.reliability || '';
-      const measure = sourceSelect.options[sourceSelect.selectedIndex]?.dataset?.measure || '';
-      const isBiomassFromOpt = (sourceSelect.options[sourceSelect.selectedIndex]?.dataset?.biomass === 'Có');
-      
-      const { factor, fuelItem } = lookupFactor(efName, refName);
-      let finalFactor = customFactorStr ? parseNum(customFactorStr) : factor;
-      
-      const typeStr = (sourceType || '').toLowerCase();
-      const eqStr = (sourceName || '').toLowerCase();
-      const isWW = typeStr.includes('nước thải') || typeStr.includes('tự hoại') || eqStr.includes('nước thải') || eqStr.includes('tự hoại') || eqStr.includes('hiếu khí') || eqStr.includes('kỵ khí') || eqStr.includes('bùn') || typeStr.includes('waste');
-      
-      const isBiomass = isBiomassFromOpt ||
-                        (fuelItem && (fuelItem.isBiogenic || fuelItem.biogenic_factor)) ||
-                        (efName && (efName.toLowerCase().includes('sinh khối') || efName.toLowerCase().includes('củi') || efName.toLowerCase().includes('trấu') || efName.toLowerCase().includes('mùn cưa') || efName.toLowerCase().includes('dăm gỗ') || efName.toLowerCase().includes('viên nén') || efName.toLowerCase().includes('biomass'))) ||
-                        (sourceName && (sourceName.toLowerCase().includes('sinh khối') || sourceName.toLowerCase().includes('củi') || sourceName.toLowerCase().includes('trấu') || sourceName.toLowerCase().includes('mùn cưa') || sourceName.toLowerCase().includes('dăm gỗ') || sourceName.toLowerCase().includes('viên nén') || sourceName.toLowerCase().includes('biomass')));
-
-      // Khởi tạo GWPs (Mặc định AR5)
-      let ch4Gwp = 28;
-      let n2oGwp = 265;
-      if (typeof window !== 'undefined' && window.IPCC_DB) {
-          const userStr = localStorage.getItem('gs_current_user');
-          let ar = 'AR5-100';
-          if (userStr) {
-              try { 
-                  const users = JSON.parse(localStorage.getItem('gs_users') || '[]');
-                  const u = users.find(x => x.username === userStr);
-                  if (u && u.company && u.company.ipccAR) ar = u.company.ipccAR;
-              } catch(e){}
-          }
-          if (window.IPCC_DB[ar]) {
-              if (window.IPCC_DB[ar]['Methane']) ch4Gwp = window.IPCC_DB[ar]['Methane'];
-              if (window.IPCC_DB[ar]['Nitrous oxide']) n2oGwp = window.IPCC_DB[ar]['Nitrous oxide'];
-          }
-      }
-
-      let co2eCalc = amount * finalFactor;
-      let biogenicCo2 = 0;
-      let wwS = 0, wwR = 0;
-      
-      // ƯU TIÊN 1: NẾU LÀ ĐỐT NHIÊN LIỆU (Có NCV nhiệt trị)
-      if (fuelItem && fuelItem.ncv) {
-        let massKg = amount;
-        
-        // Chuyển đổi Lít sang Kg nếu unit là lít/m3 và có tỷ trọng (density)
-        const unitLower = unit.toLowerCase();
-        if ((unitLower.includes('lít') || unitLower.includes('lit') || unitLower === 'l' || unitLower === 'm3') && fuelItem.density) {
-            massKg = amount * fuelItem.density;
-        } else if (unitLower.includes('tấn') || unitLower.includes('tan') || unitLower === 't') {
-            massKg = amount * 1000;
-        }
-        
-        // Tính năng lượng TJ: Khối lượng (kg) / 10^6 * NCV (TJ/Gg)
-        const energyTJ = (massKg / 1000000) * fuelItem.ncv;
-        
-        // Khối lượng từng loại khí (kg)
-        const co2_kg = energyTJ * (fuelItem.ef_co2_tj || 0);
-        const ch4_kg = energyTJ * (fuelItem.ef_ch4_tj || 0);
-        const n2o_kg = energyTJ * (fuelItem.ef_n2o_tj || 0);
-        
-        if (isBiomass) {
-          // THEO IPCC 2006, GHG PROTOCOL VÀ ISO 14064-1:
-          // CO2 sinh học (Biogenic CO2) BẮT BUỘC TÁCH RIÊNG KHỎI SCOPE 1
-          // Scope 1 trực tiếp CHỈ tính các khí phát thải không phải CO2: CH4 và N2O
-          co2eCalc = (ch4_kg * ch4Gwp) + (n2o_kg * n2oGwp);
-          biogenicCo2 = co2_kg > 0 ? co2_kg : (massKg * (fuelItem.biogenic_factor || 1.7472));
-          if (amount > 0) finalFactor = co2eCalc / amount;
-        } else {
-          // Nhiên liệu hóa thạch: Tổng CO2e (kg) = CO2 + (CH4 * GWP) + (N2O * GWP)
-          co2eCalc = co2_kg + (ch4_kg * ch4Gwp) + (n2o_kg * n2oGwp);
-          biogenicCo2 = 0;
-          if (amount > 0) finalFactor = co2eCalc / amount;
-        }
-      } 
-      // ƯU TIÊN 2: PHÁT THẢI QUÁ TRÌNH CÔNG NGHIỆP (IPPU)
-      else if (!fuelItem?.ncv && (
-        (sourceSelect.options[sourceSelect.selectedIndex]?.dataset?.isProcessEmission === 'true') ||
-        typeStr.includes('quá trình công nghiệp') ||
-        typeStr.includes('thổi oxy') ||
-        Boolean(sourceSelect.options[sourceSelect.selectedIndex]?.dataset?.productionUnit)
-      )) {
-        let efNum = parseNum(customFactorStr);
-        if (!efNum && factor) efNum = parseNum(factor);
-        if (!efNum || efNum <= 0) {
-          alert('Vui lòng kiểm tra và nhập hệ số phát thải hợp lệ (> 0) cho nguồn phát thải quá trình.');
+    if (btnSaveActivity) btnSaveActivity.addEventListener('click', (e) => {
+      if (e && typeof e.preventDefault === 'function') e.preventDefault();
+      try {
+        if (!activityForm.checkValidity()) {
+          activityForm.reportValidity();
           return;
         }
-        const efUnit = (sourceSelect.options[sourceSelect.selectedIndex]?.dataset?.efUnit || '').toLowerCase();
-        let efKg = efNum;
-        if (efUnit.includes('tco2') || efUnit.includes('tấn co2') || efUnit.includes('t co2')) {
-          efKg = efNum * 1000;
-        } else if (efUnit.includes('kgco2') || efUnit.includes('kg co2')) {
-          efKg = efNum;
-        } else {
-          // Bắt buộc kiểm tra đơn vị rõ ràng thay vì tự ý suy đoán theo ngưỡng <= 5
-          const isTonne = (typeof confirm === 'function')
-            ? confirm(`Hệ số phát thải quá trình (${efNum}) chưa có đơn vị rõ ràng trong cơ sở dữ liệu.\n\nNhấn OK nếu đơn vị là tCO2e/tấn sản phẩm (sẽ nhân 1.000 ra kgCO2e).\nNhấn Cancel nếu đơn vị là kgCO2e/tấn sản phẩm.`)
-            : false;
-          efKg = isTonne ? (efNum * 1000) : efNum;
-        }
-        finalFactor = efKg;
-        co2eCalc = amount * efKg;
-      } 
-      // ƯU TIÊN 3: XỬ LÝ NƯỚC THẢI (CH4 từ BOD/COD theo IPCC Vol 5)
-      else if (isWW) {
-        if (!finalFactor || finalFactor === 0) {
-          // BOD cho nước thải sinh hoạt (B0 = 0.6), COD cho nước thải công nghiệp (B0 = 0.25)
-          const isIndustrialWW = typeStr.includes('công nghiệp') || eqStr.includes('công nghiệp') || unit.toLowerCase().includes('cod');
-          const b0 = isIndustrialWW ? 0.25 : 0.6;
-          let mcf = 0.3;
-          if (eqStr.includes('tự hoại') || eqStr.includes('septic')) mcf = 0.3;
-          else if (eqStr.includes('hiếu khí') || eqStr.includes('aerotank')) mcf = 0.0;
-          else if (eqStr.includes('kỵ khí') || eqStr.includes('biogas')) mcf = 0.8;
-          else if (eqStr.includes('hồ sinh học') || eqStr.includes('lagoon')) mcf = 0.2;
-          finalFactor = b0 * mcf;
-        }
-        wwS = parseNum(document.getElementById('activity-ww-s')?.value) || 0;
-        wwR = parseNum(document.getElementById('activity-ww-r')?.value) || 0;
+
+        const dateEl = document.getElementById('activity-date');
+        const date = (dateEl && dateEl.value) ? dateEl.value : new Date().toISOString().slice(0, 10);
+        const selectedOption = sourceSelect.options[sourceSelect.selectedIndex];
+        const sourceId = sourceSelect.value;
+        const sourceName = selectedOption ? selectedOption.text : '';
+        const rawAmtStr = String(document.getElementById('activity-amount')?.value || '0').replace(',', '.');
+        const parseNum = (typeof window !== 'undefined' && typeof window.parseVnNumber === 'function') ? window.parseVnNumber : parseFloat;
+        const amount = parseNum(document.getElementById('activity-amount')?.value || rawAmtStr);
+        const unit = document.getElementById('activity-unit')?.value || 'lít';
         
-        const ch4Emission = ((amount - wwS) * finalFactor) - wwR;
-        co2eCalc = Math.max(0, ch4Emission) * ch4Gwp;
-      } 
-      // ƯU TIÊN 4: SINH KHỐI KHÔNG CÓ NCV
-      else if (isBiomass) {
-        let massKg = amount;
-        const unitLower = unit.toLowerCase();
-        if (unitLower.includes('tấn') || unitLower.includes('tan') || unitLower === 't') {
-          massKg = amount * 1000;
+        const doc = document.getElementById('activity-doc')?.value || '';
+        const manager = document.getElementById('activity-manager')?.value || '';
+        
+        const fileInput = document.getElementById('activity-file');
+        const hasNewFile = fileInput && fileInput.files && fileInput.files.length > 0;
+        const fileName = hasNewFile ? fileInput.files[0].name : (currentEditingRow ? (currentEditingRow.dataset.fileName || '') : '');
+        const docId = (hasNewFile && window._currentUploadedDoc)
+          ? (window._currentUploadedDoc.docId || '')
+          : (currentEditingRow ? (currentEditingRow.dataset.docId || '') : (window._currentUploadedDoc ? window._currentUploadedDoc.docId || '' : ''));
+        const fileUrl = (hasNewFile && window._currentUploadedDoc)
+          ? (window._currentUploadedDoc.fileUrl || '')
+          : (currentEditingRow ? (currentEditingRow.dataset.fileUrl || '') : (window._currentUploadedDoc ? window._currentUploadedDoc.fileUrl || '' : ''));
+        const fileType = (hasNewFile && window._currentUploadedDoc)
+          ? (window._currentUploadedDoc.fileType || '')
+          : (currentEditingRow ? (currentEditingRow.dataset.fileType || '') : (window._currentUploadedDoc ? window._currentUploadedDoc.fileType || '' : ''));
+        
+        const sourceType = selectedOption?.dataset?.type || '';
+        const efName = selectedOption?.dataset?.ef || '';
+        const refName = selectedOption?.dataset?.refrigerant || '';
+        const customFactorStr = selectedOption?.dataset?.efFactor || '';
+        const reliability = selectedOption?.dataset?.reliability || '';
+        const measure = selectedOption?.dataset?.measure || '';
+        const isBiomassFromOpt = (selectedOption?.dataset?.biomass === 'Có');
+        
+        const { factor, fuelItem } = lookupFactor(efName, refName);
+        let finalFactor = customFactorStr ? parseNum(customFactorStr) : factor;
+        
+        const typeStr = (sourceType || '').toLowerCase();
+        const eqStr = (sourceName || '').toLowerCase();
+        const isWW = typeStr.includes('nước thải') || typeStr.includes('tự hoại') || eqStr.includes('nước thải') || eqStr.includes('tự hoại') || eqStr.includes('hiếu khí') || eqStr.includes('kỵ khí') || eqStr.includes('bùn') || typeStr.includes('waste');
+        
+        const isProcess = (selectedOption?.dataset?.isProcessEmission === 'true') ||
+                          typeStr.includes('quá trình công nghiệp') ||
+                          typeStr.includes('thổi oxy') ||
+                          Boolean(selectedOption?.dataset?.productionUnit) ||
+                          (modalTitle && modalTitle.innerText.includes('Chốt sản lượng')) ||
+                          eqStr.includes('lò hồ quang điện') ||
+                          eqStr.includes('quá trình');
+
+        const isBiomass = isBiomassFromOpt ||
+                          (fuelItem && (fuelItem.isBiogenic || fuelItem.biogenic_factor)) ||
+                          (efName && (efName.toLowerCase().includes('sinh khối') || efName.toLowerCase().includes('củi') || efName.toLowerCase().includes('trấu') || efName.toLowerCase().includes('mùn cưa') || efName.toLowerCase().includes('dăm gỗ') || efName.toLowerCase().includes('viên nén') || efName.toLowerCase().includes('biomass'))) ||
+                          (sourceName && (sourceName.toLowerCase().includes('sinh khối') || sourceName.toLowerCase().includes('củi') || sourceName.toLowerCase().includes('trấu') || sourceName.toLowerCase().includes('mùn cưa') || sourceName.toLowerCase().includes('dăm gỗ') || sourceName.toLowerCase().includes('viên nén') || sourceName.toLowerCase().includes('biomass')));
+
+        // Khởi tạo GWPs (Mặc định AR5)
+        let ch4Gwp = 28;
+        let n2oGwp = 265;
+        if (typeof window !== 'undefined' && window.IPCC_DB) {
+            const userStr = localStorage.getItem('gs_current_user');
+            let ar = 'AR5-100';
+            if (userStr) {
+                try { 
+                    const users = JSON.parse(localStorage.getItem('gs_users') || '[]');
+                    const u = users.find(x => x.username === userStr);
+                    if (u && u.company && u.company.ipccAR) ar = u.company.ipccAR;
+                } catch(e){}
+            }
+            if (window.IPCC_DB[ar]) {
+                if (window.IPCC_DB[ar]['Methane']) ch4Gwp = window.IPCC_DB[ar]['Methane'];
+                if (window.IPCC_DB[ar]['Nitrous oxide']) n2oGwp = window.IPCC_DB[ar]['Nitrous oxide'];
+            }
         }
-        const bioFactor = (fuelItem && fuelItem.biogenic_factor) ? fuelItem.biogenic_factor : 1.7472;
-        const nonCo2Factor = (fuelItem && fuelItem.factor) ? fuelItem.factor : 0.038;
-        co2eCalc = massKg * nonCo2Factor;
-        biogenicCo2 = massKg * bioFactor;
-        if (amount > 0) finalFactor = co2eCalc / amount;
-      }
 
-      // Xử lý ghi nhận tính chất Dừng máy / Bảo trì sự cố / Có tăng ca
-      const recordTypeEl = document.querySelector('input[name="act-record-type"]:checked');
-      const recordType = recordTypeEl ? recordTypeEl.value : 'normal';
-      const isDowntime = (recordType === 'downtime');
-      const isOvertime = (recordType === 'overtime');
-
-      // Giữ nguyên dấu đại số: Cho phép lưu trữ giá trị âm cho hoạt động giảm trừ, hấp thụ LULUCF, xuất nhiệt hoặc điều chỉnh bảo trì
-      let finalAmount = amount;
-      let finalCo2e = (amount < 0 && co2eCalc > 0) ? -co2eCalc : co2eCalc;
-
-      // Nếu dừng máy 100% ca thì amount = 0
-      if (isDowntime && amount === 0) {
-        finalAmount = 0;
-        finalCo2e = 0;
-        biogenicCo2 = 0;
-      }
-
-      const co2e = finalCo2e.toFixed(2);
-      const now = new Date().toISOString().slice(0, 10) + ' ' + new Date().toTimeString().slice(0, 5);
-
-      const userRole = localStorage.getItem('gs_user_role') || 'engineer';
-      const docLower = (doc || '').toLowerCase();
-      const isInvoice = (userRole === 'accountant') ||
-                        docLower.includes('hóa đơn') || docLower.includes('hoa don') ||
-                        docLower.includes('thanh toán') ||
-                        docLower.includes('hđ');
-
-      const rawStart = document.getElementById('input-op-time-start')?.value || '';
-      const rawEnd = document.getElementById('input-op-time-end')?.value || '';
-      const timeStart = formatTimeStr(rawStart);
-      const timeEnd = formatTimeStr(rawEnd);
-      let finalDoc = (doc || '').trim();
-      if (timeStart && timeEnd) {
-        finalDoc = finalDoc.replace(/\s*\(\s*\d{1,2}(?::\d{2})?\s*-\s*\d{1,2}(?::\d{2})?\s*\)/g, '').trim();
-        finalDoc = finalDoc ? `${finalDoc} (${timeStart} - ${timeEnd})` : `(${timeStart} - ${timeEnd})`;
-      }
-
-      // Nếu kỹ sư không nhập lý do thì tạo ghi chú mặc định theo trạng thái ca
-      if (!finalDoc) {
-        if (isInvoice || userRole === 'accountant') {
-          finalDoc = fileName ? `Hóa đơn / Tệp: ${fileName}` : 'Hóa đơn mua ngoài / Nhập kho';
-        } else if (isProcess) {
-          finalDoc = 'Phiếu cân ca máy - Nghiệm thu phôi thép';
-        } else if (isDowntime) {
-          const dtH = parseFloat(document.getElementById('input-op-hours')?.value) || 0;
-          finalDoc = `Bảo trì / Giảm trừ ${dtH}h ca máy`;
-        } else if (isOvertime) {
-          const otH = parseFloat(document.getElementById('input-op-hours')?.value) || 0;
-          finalDoc = `Tăng ca sản xuất +${otH}h`;
-        } else {
-          finalDoc = 'Vận hành ca chuẩn';
+        let co2eCalc = amount * finalFactor;
+        let biogenicCo2 = 0;
+        let wwS = 0, wwR = 0;
+        
+        // ƯU TIÊN 1: NẾU LÀ ĐỐT NHIÊN LIỆU (Có NCV nhiệt trị)
+        if (fuelItem && fuelItem.ncv) {
+          let massKg = amount;
+          
+          // Chuyển đổi Lít sang Kg nếu unit là lít/m3 và có tỷ trọng (density)
+          const unitLower = unit.toLowerCase();
+          if ((unitLower.includes('lít') || unitLower.includes('lit') || unitLower === 'l' || unitLower === 'm3') && fuelItem.density) {
+              massKg = amount * fuelItem.density;
+          } else if (unitLower.includes('tấn') || unitLower.includes('tan') || unitLower === 't') {
+              massKg = amount * 1000;
+          }
+          
+          // Tính năng lượng TJ: Khối lượng (kg) / 10^6 * NCV (TJ/Gg)
+          const energyTJ = (massKg / 1000000) * fuelItem.ncv;
+          
+          // Khối lượng từng loại khí (kg)
+          const co2_kg = energyTJ * (fuelItem.ef_co2_tj || 0);
+          const ch4_kg = energyTJ * (fuelItem.ef_ch4_tj || 0);
+          const n2o_kg = energyTJ * (fuelItem.ef_n2o_tj || 0);
+          
+          if (isBiomass) {
+            // THEO IPCC 2006, GHG PROTOCOL VÀ ISO 14064-1:
+            // CO2 sinh học (Biogenic CO2) BẮT BUỘC TÁCH RIÊNG KHỎI SCOPE 1
+            // Scope 1 trực tiếp CHỈ tính các khí phát thải không phải CO2: CH4 và N2O
+            co2eCalc = (ch4_kg * ch4Gwp) + (n2o_kg * n2oGwp);
+            biogenicCo2 = co2_kg > 0 ? co2_kg : (massKg * (fuelItem.biogenic_factor || 1.7472));
+            if (amount > 0) finalFactor = co2eCalc / amount;
+          } else {
+            // Nhiên liệu hóa thạch: Tổng CO2e (kg) = CO2 + (CH4 * GWP) + (N2O * GWP)
+            co2eCalc = co2_kg + (ch4_kg * ch4Gwp) + (n2o_kg * n2oGwp);
+            biogenicCo2 = 0;
+            if (amount > 0) finalFactor = co2eCalc / amount;
+          }
+        } 
+        // ƯU TIÊN 2: PHÁT THẢI QUÁ TRÌNH CÔNG NGHIỆP (IPPU)
+        else if (!fuelItem?.ncv && (
+          (selectedOption?.dataset?.isProcessEmission === 'true') ||
+          typeStr.includes('quá trình công nghiệp') ||
+          typeStr.includes('thổi oxy') ||
+          Boolean(selectedOption?.dataset?.productionUnit)
+        )) {
+          let efNum = parseNum(customFactorStr);
+          if (!efNum && factor) efNum = parseNum(factor);
+          if (!efNum || efNum <= 0) {
+            alert('Vui lòng kiểm tra và nhập hệ số phát thải hợp lệ (> 0) cho nguồn phát thải quá trình.');
+            return;
+          }
+          const efUnit = (selectedOption?.dataset?.efUnit || '').toLowerCase();
+          let efKg = efNum;
+          if (efUnit.includes('tco2') || efUnit.includes('tấn co2') || efUnit.includes('t co2')) {
+            efKg = efNum * 1000;
+          } else if (efUnit.includes('kgco2') || efUnit.includes('kg co2')) {
+            efKg = efNum;
+          } else {
+            // Bắt buộc kiểm tra đơn vị rõ ràng thay vì tự ý suy đoán theo ngưỡng <= 5
+            const isTonne = (typeof confirm === 'function')
+              ? confirm(`Hệ số phát thải quá trình (${efNum}) chưa có đơn vị rõ ràng trong cơ sở dữ liệu.\n\nNhấn OK nếu đơn vị là tCO2e/tấn sản phẩm (sẽ nhân 1.000 ra kgCO2e).\nNhấn Cancel nếu đơn vị là kgCO2e/tấn sản phẩm.`)
+              : false;
+            efKg = isTonne ? (efNum * 1000) : efNum;
+          }
+          finalFactor = efKg;
+          co2eCalc = amount * efKg;
+        } 
+        // ƯU TIÊN 3: XỬ LÝ NƯỚC THẢI (CH4 từ BOD/COD theo IPCC Vol 5)
+        else if (isWW) {
+          if (!finalFactor || finalFactor === 0) {
+            // BOD cho nước thải sinh hoạt (B0 = 0.6), COD cho nước thải công nghiệp (B0 = 0.25)
+            const isIndustrialWW = typeStr.includes('công nghiệp') || eqStr.includes('công nghiệp') || unit.toLowerCase().includes('cod');
+            const b0 = isIndustrialWW ? 0.25 : 0.6;
+            let mcf = 0.3;
+            if (eqStr.includes('tự hoại') || eqStr.includes('septic')) mcf = 0.3;
+            else if (eqStr.includes('hiếu khí') || eqStr.includes('aerotank')) mcf = 0.0;
+            else if (eqStr.includes('kỵ khí') || eqStr.includes('biogas')) mcf = 0.8;
+            else if (eqStr.includes('hồ sinh học') || eqStr.includes('lagoon')) mcf = 0.2;
+            finalFactor = b0 * mcf;
+          }
+          wwS = parseNum(document.getElementById('activity-ww-s')?.value) || 0;
+          wwR = parseNum(document.getElementById('activity-ww-r')?.value) || 0;
+          
+          const ch4Emission = ((amount - wwS) * finalFactor) - wwR;
+          co2eCalc = Math.max(0, ch4Emission) * ch4Gwp;
+        } 
+        // ƯU TIÊN 4: SINH KHỐI KHÔNG CÓ NCV
+        else if (isBiomass) {
+          let massKg = amount;
+          const unitLower = unit.toLowerCase();
+          if (unitLower.includes('tấn') || unitLower.includes('tan') || unitLower === 't') {
+            massKg = amount * 1000;
+          }
+          const bioFactor = (fuelItem && fuelItem.biogenic_factor) ? fuelItem.biogenic_factor : 1.7472;
+          const nonCo2Factor = (fuelItem && fuelItem.factor) ? fuelItem.factor : 0.038;
+          co2eCalc = massKg * nonCo2Factor;
+          biogenicCo2 = massKg * bioFactor;
+          if (amount > 0) finalFactor = co2eCalc / amount;
         }
-      }
 
-      const dataObj = {
-        date, sourceId, sourceType, sourceName, amount: finalAmount, unit, doc: finalDoc, manager, co2e,
-        efName, refName, finalFactor, fileName, docId, fileUrl, fileType, createdAt: now,
-        isBiomass: isBiomass ? 'true' : 'false',
-        biogenicCo2: biogenicCo2.toFixed(2),
-        wwS: isWW ? wwS : 0, wwR: isWW ? wwR : 0,
-        entryRole: userRole,
-        entryMode: isProcess ? 'direct' : currentActMode,
-        timeStart: isProcess ? '' : timeStart,
-        timeEnd: isProcess ? '' : timeEnd,
-        isInvoice: isInvoice ? 'true' : 'false',
-        isDowntime: isDowntime ? 'true' : 'false',
-        isOvertime: isOvertime ? 'true' : 'false',
-        recordType: isProcess ? 'actual_production' : recordType,
-        downtimeHours: isDowntime ? (parseFloat(document.getElementById('input-op-hours')?.value) || 0) : 0,
-        overtimeHours: isOvertime ? (parseFloat(document.getElementById('input-op-hours')?.value) || 0) : 0,
-        hourlyRate: document.getElementById('input-op-rate')?.value || currentEditingRow?.dataset?.hourlyRate || sourceSelect.options[sourceSelect.selectedIndex]?.dataset?.hourlyRate || '',
-        stdHours: (currentEditingRow?.dataset?.stdHours || sourceSelect.options[sourceSelect.selectedIndex]?.dataset?.opHoursDay || '16'),
-        isBaseline: isProcess ? 'false' : ((currentEditingRow && currentEditingRow.dataset.isBaseline === 'true') ? 'true' : 'false')
-      };
+        // Xử lý ghi nhận tính chất Dừng máy / Bảo trì sự cố / Có tăng ca
+        const recordTypeEl = document.querySelector('input[name="act-record-type"]:checked');
+        const recordType = recordTypeEl ? recordTypeEl.value : 'normal';
+        const isDowntime = (recordType === 'downtime');
+        const isOvertime = (recordType === 'overtime');
 
-      let existingBaselineRow = null;
-      if (!currentEditingRow && isProcess) {
-        const rows = tbody.querySelectorAll('tr:not(#no-activity-row)');
-        for (const r of rows) {
-          if (r.dataset.date === date && (r.dataset.sourceId === sourceId || r.dataset.sourceName === sourceName) && r.dataset.isBaseline === 'true') {
-            existingBaselineRow = r;
-            break;
+        // Giữ nguyên dấu đại số: Cho phép lưu trữ giá trị âm cho hoạt động giảm trừ, hấp thụ LULUCF, xuất nhiệt hoặc điều chỉnh bảo trì
+        let finalAmount = amount;
+        let finalCo2e = (amount < 0 && co2eCalc > 0) ? -co2eCalc : co2eCalc;
+
+        // Nếu dừng máy 100% ca thì amount = 0
+        if (isDowntime && amount === 0) {
+          finalAmount = 0;
+          finalCo2e = 0;
+          biogenicCo2 = 0;
+        }
+
+        const co2e = finalCo2e.toFixed(2);
+        const now = new Date().toISOString().slice(0, 10) + ' ' + new Date().toTimeString().slice(0, 5);
+
+        const userRole = localStorage.getItem('gs_user_role') || 'engineer';
+        const docLower = (doc || '').toLowerCase();
+        const isInvoice = (userRole === 'accountant') ||
+                          docLower.includes('hóa đơn') || docLower.includes('hoa don') ||
+                          docLower.includes('thanh toán') ||
+                          docLower.includes('hđ');
+
+        const rawStart = document.getElementById('input-op-time-start')?.value || '';
+        const rawEnd = document.getElementById('input-op-time-end')?.value || '';
+        const timeStart = formatTimeStr(rawStart);
+        const timeEnd = formatTimeStr(rawEnd);
+        let finalDoc = (doc || '').trim();
+        if (timeStart && timeEnd) {
+          finalDoc = finalDoc.replace(/\s*\(\s*\d{1,2}(?::\d{2})?\s*-\s*\d{1,2}(?::\d{2})?\s*\)/g, '').trim();
+          finalDoc = finalDoc ? `${finalDoc} (${timeStart} - ${timeEnd})` : `(${timeStart} - ${timeEnd})`;
+        }
+
+        // Nếu kỹ sư không nhập lý do thì tạo ghi chú mặc định theo trạng thái ca
+        if (!finalDoc) {
+          if (isInvoice || userRole === 'accountant') {
+            finalDoc = fileName ? `Hóa đơn / Tệp: ${fileName}` : 'Hóa đơn mua ngoài / Nhập kho';
+          } else if (isProcess) {
+            finalDoc = 'Phiếu cân ca máy - Nghiệm thu phôi thép';
+          } else if (isDowntime) {
+            const dtH = parseFloat(document.getElementById('input-op-hours')?.value) || 0;
+            finalDoc = `Bảo trì / Giảm trừ ${dtH}h ca máy`;
+          } else if (isOvertime) {
+            const otH = parseFloat(document.getElementById('input-op-hours')?.value) || 0;
+            finalDoc = `Tăng ca sản xuất +${otH}h`;
+          } else {
+            finalDoc = 'Vận hành ca chuẩn';
           }
         }
-      }
 
-      if (currentEditingRow) {
-        dataObj.createdAt = currentEditingRow.dataset.createdAt;
-        if (!dataObj.docId && currentEditingRow.dataset.docId) dataObj.docId = currentEditingRow.dataset.docId;
-        if (!dataObj.fileUrl && currentEditingRow.dataset.fileUrl) dataObj.fileUrl = currentEditingRow.dataset.fileUrl;
-        if (!dataObj.fileType && currentEditingRow.dataset.fileType) dataObj.fileType = currentEditingRow.dataset.fileType;
-        Object.assign(currentEditingRow.dataset, dataObj);
-        updateRowHTML(currentEditingRow, dataObj);
-        currentEditingRow = null;
-        window._currentUploadedDoc = null;
-      } else if (existingBaselineRow) {
-        dataObj.createdAt = existingBaselineRow.dataset.createdAt;
-        if (!dataObj.docId && existingBaselineRow.dataset.docId) dataObj.docId = existingBaselineRow.dataset.docId;
-        if (!dataObj.fileUrl && existingBaselineRow.dataset.fileUrl) dataObj.fileUrl = existingBaselineRow.dataset.fileUrl;
-        if (!dataObj.fileType && existingBaselineRow.dataset.fileType) dataObj.fileType = existingBaselineRow.dataset.fileType;
-        Object.assign(existingBaselineRow.dataset, dataObj);
-        updateRowHTML(existingBaselineRow, dataObj);
-        window._currentUploadedDoc = null;
-      } else {
-        document.getElementById('no-activity-row')?.remove();
-        renderRow(dataObj);
-        window._currentUploadedDoc = null;
-      }
-      
-      saveActivityList();
+        const dataObj = {
+          date, sourceId, sourceType, sourceName, amount: finalAmount, unit, doc: finalDoc, manager, co2e,
+          efName, refName, finalFactor, fileName, docId, fileUrl, fileType, createdAt: now,
+          isBiomass: isBiomass ? 'true' : 'false',
+          biogenicCo2: biogenicCo2.toFixed(2),
+          wwS: isWW ? wwS : 0, wwR: isWW ? wwR : 0,
+          entryRole: userRole,
+          entryMode: isProcess ? 'direct' : currentActMode,
+          timeStart: isProcess ? '' : timeStart,
+          timeEnd: isProcess ? '' : timeEnd,
+          isInvoice: isInvoice ? 'true' : 'false',
+          isDowntime: isDowntime ? 'true' : 'false',
+          isOvertime: isOvertime ? 'true' : 'false',
+          recordType: isProcess ? 'actual_production' : recordType,
+          downtimeHours: isDowntime ? (parseFloat(document.getElementById('input-op-hours')?.value) || 0) : 0,
+          overtimeHours: isOvertime ? (parseFloat(document.getElementById('input-op-hours')?.value) || 0) : 0,
+          hourlyRate: document.getElementById('input-op-rate')?.value || currentEditingRow?.dataset?.hourlyRate || selectedOption?.dataset?.hourlyRate || '',
+          stdHours: (currentEditingRow?.dataset?.stdHours || selectedOption?.dataset?.opHoursDay || '16'),
+          isBaseline: isProcess ? 'false' : ((currentEditingRow && currentEditingRow.dataset.isBaseline === 'true') ? 'true' : 'false')
+        };
 
-      // Đảm bảo dòng vừa tạo luôn hiển thị nếu bộ lọc nguồn hiện hành đang ẩn nó
-      if (actHiddenFilter && actHiddenFilter.value) {
-        const fVal = actHiddenFilter.value.toLowerCase().trim();
-        const rVal = (dataObj.sourceType || '').toLowerCase().trim();
-        const sVal = (dataObj.sourceName || '').toLowerCase().trim();
-        if (rVal !== fVal && !rVal.includes(fVal) && !fVal.includes(rVal) && !sVal.includes(fVal)) {
-          actHiddenFilter.value = '';
-          if (actFilterInput) actFilterInput.innerText = '-- Tất cả Nguồn phát thải --';
-          applyFilter('');
+        let existingBaselineRow = null;
+        if (!currentEditingRow && isProcess) {
+          const rows = tbody.querySelectorAll('tr:not(#no-activity-row)');
+          for (const r of rows) {
+            if (r.dataset.date === date && (r.dataset.sourceId === sourceId || r.dataset.sourceName === sourceName) && r.dataset.isBaseline === 'true') {
+              existingBaselineRow = r;
+              break;
+            }
+          }
         }
-      }
 
-      closeModal();
+        if (currentEditingRow) {
+          dataObj.createdAt = currentEditingRow.dataset.createdAt;
+          if (!dataObj.docId && currentEditingRow.dataset.docId) dataObj.docId = currentEditingRow.dataset.docId;
+          if (!dataObj.fileUrl && currentEditingRow.dataset.fileUrl) dataObj.fileUrl = currentEditingRow.dataset.fileUrl;
+          if (!dataObj.fileType && currentEditingRow.dataset.fileType) dataObj.fileType = currentEditingRow.dataset.fileType;
+          Object.assign(currentEditingRow.dataset, dataObj);
+          updateRowHTML(currentEditingRow, dataObj);
+          currentEditingRow = null;
+          window._currentUploadedDoc = null;
+        } else if (existingBaselineRow) {
+          dataObj.createdAt = existingBaselineRow.dataset.createdAt;
+          if (!dataObj.docId && existingBaselineRow.dataset.docId) dataObj.docId = existingBaselineRow.dataset.docId;
+          if (!dataObj.fileUrl && existingBaselineRow.dataset.fileUrl) dataObj.fileUrl = existingBaselineRow.dataset.fileUrl;
+          if (!dataObj.fileType && existingBaselineRow.dataset.fileType) dataObj.fileType = existingBaselineRow.dataset.fileType;
+          Object.assign(existingBaselineRow.dataset, dataObj);
+          updateRowHTML(existingBaselineRow, dataObj);
+          window._currentUploadedDoc = null;
+        } else {
+          document.getElementById('no-activity-row')?.remove();
+          renderRow(dataObj);
+          window._currentUploadedDoc = null;
+        }
+        
+        saveActivityList();
+
+        // Đảm bảo dòng vừa tạo luôn hiển thị nếu bộ lọc nguồn hiện hành đang ẩn nó
+        if (actHiddenFilter && actHiddenFilter.value) {
+          const fVal = actHiddenFilter.value.toLowerCase().trim();
+          const rVal = (dataObj.sourceType || '').toLowerCase().trim();
+          const sVal = (dataObj.sourceName || '').toLowerCase().trim();
+          if (rVal !== fVal && !rVal.includes(fVal) && !fVal.includes(rVal) && !sVal.includes(fVal)) {
+            actHiddenFilter.value = '';
+            if (actFilterInput) actFilterInput.innerText = '-- Tất cả Nguồn phát thải --';
+            applyFilter('');
+          }
+        }
+
+        closeModal();
+      } catch (err) {
+        console.error('[Activity] Lỗi khi lưu dữ liệu hoạt động:', err);
+        alert('Đã xảy ra lỗi khi lưu: ' + err.message);
+      }
     });
 
     function renderRow(data) {

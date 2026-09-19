@@ -2172,10 +2172,20 @@
     const savedRole = localStorage.getItem('gs_user_role') || (user ? user.role : 'engineer') || 'engineer';
     const roleSelector = document.getElementById('user-role-selector');
     if (roleSelector) {
-      roleSelector.value = savedRole;
+      const normalizedSavedRole = (savedRole === 'director') ? 'esg_director' : savedRole;
+      roleSelector.value = normalizedSavedRole;
       roleSelector.addEventListener('change', function () {
         const newRole = this.value;
         localStorage.setItem('gs_user_role', newRole);
+        try {
+          const uEmail = (localStorage.getItem('gs_current_user') || '').toLowerCase();
+          let allUsers = JSON.parse(localStorage.getItem('gs_users') || '[]');
+          const idx = allUsers.findIndex(u => (u.username && u.username.toLowerCase() === uEmail) || (u.email && u.email.toLowerCase() === uEmail));
+          if (idx !== -1) {
+            allUsers[idx].role = newRole;
+            localStorage.setItem('gs_users', JSON.stringify(allUsers));
+          }
+        } catch(e) {}
         if (typeof applyRoleBasedNavigation === 'function') {
           applyRoleBasedNavigation(newRole, true);
         }
@@ -2284,8 +2294,9 @@
       allNavs.forEach(nav => { nav.style.display = ''; });
 
       const roleSelector = document.getElementById('user-role-selector');
-      if (roleSelector && roleSelector.value !== role) {
-        roleSelector.value = role;
+      const normalizedRole = (role === 'director') ? 'esg_director' : role;
+      if (roleSelector && roleSelector.value !== normalizedRole) {
+        roleSelector.value = normalizedRole;
       }
 
       // Các khối chuyên trách trong tab Dữ liệu hoạt động
@@ -2398,9 +2409,9 @@
     }
     window.applyRoleBasedNavigation = applyRoleBasedNavigation;
 
-    // Khởi tạo hiển thị tab theo role hiện tại của tài khoản đăng nhập
+    // Khởi tạo hiển thị tab theo role hiện tại của tài khoản đăng nhập (đưa về đúng giao diện chính của vai trò đó)
     const currentActiveRole = localStorage.getItem('gs_user_role') || (user ? user.role : 'engineer') || 'engineer';
-    applyRoleBasedNavigation(currentActiveRole);
+    applyRoleBasedNavigation(currentActiveRole, true);
 
     const sourceSelect = document.getElementById('source-select');
     const btnAdd = document.getElementById('btn-add-equipment');

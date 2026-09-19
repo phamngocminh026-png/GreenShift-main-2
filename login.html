@@ -408,7 +408,7 @@
           if (serverData.success) {
             localStorage.setItem('gs_auth_token', serverData.token || '');
             localStorage.setItem('gs_current_user', usernameInput);
-            const verifiedRole = serverData.role || 'accountant';
+            const verifiedRole = role || serverData.role || 'engineer';
             localStorage.setItem('gs_user_role', verifiedRole);
             if (serverData.facility_id) localStorage.setItem('gs_facility_id', serverData.facility_id);
             
@@ -449,18 +449,14 @@
           delete loggedUser.password;
         }
 
-        // Vai trò được xác thực từ hồ sơ tài khoản (KHÔNG cho phép ghi đè tự do từ dropdown client)
-        const verifiedRole = loggedUser.role || (
-          inputLower.includes('engineer') || inputLower.includes('kysu') ? 'engineer' :
-          inputLower.includes('director') || inputLower.includes('giamdoc') ? 'director' :
-          inputLower.includes('admin') ? 'admin' : 'accountant'
-        );
+        // Tôn trọng vai trò do người dùng chủ động lựa chọn từ dropdown khi đăng nhập
+        const selectedRole = role || loggedUser.role || 'engineer';
 
-        // Lưu phiên đăng nhập & vị trí công việc đã xác thực
+        // Lưu phiên đăng nhập & vị trí công việc đã chọn
         localStorage.setItem('gs_current_user', loggedUser.username || loggedUser.email);
-        localStorage.setItem('gs_user_role', verifiedRole);
+        localStorage.setItem('gs_user_role', selectedRole);
 
-        users[userIndex].role = verifiedRole;
+        users[userIndex].role = selectedRole;
         localStorage.setItem('gs_users', JSON.stringify(users));
         
         showAlert('Đăng nhập thành công! Đang chuyển hướng...', 'success');
@@ -522,9 +518,11 @@
       const finalCompanyName = companyName || `Công ty ${fullName}`;
       const pwdHash = await hashPassword(password);
 
-      const defaultRole = emailLower.includes('engineer') || emailLower.includes('kysu') ? 'engineer' :
-                          emailLower.includes('director') || emailLower.includes('giamdoc') ? 'director' :
-                          emailLower.includes('admin') ? 'admin' : 'accountant';
+      const selectedLoginRole = document.getElementById('login-role')?.value;
+      const defaultRole = selectedLoginRole || (
+        emailLower.includes('director') || emailLower.includes('giamdoc') ? 'esg_director' :
+        emailLower.includes('accountant') || emailLower.includes('ketoan') ? 'accountant' : 'engineer'
+      );
 
       // Tạo tài khoản mới với mật khẩu đã băm SHA-256 (KHÔNG lưu plaintext)
       const newUser = {

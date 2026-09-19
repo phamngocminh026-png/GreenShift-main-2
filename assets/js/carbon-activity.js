@@ -354,6 +354,7 @@
 
     // --- ACTIVITY LOGIC ---
     let isGeneratingOperationalRecords = false;
+    let _lastLoadedActDataStr = '';
 
     function getBranchStorageKey(suffix) {
       const username = localStorage.getItem('gs_current_user') || 'guest';
@@ -435,6 +436,15 @@
           localStorage.setItem(normActKey, stored);
         }
       }
+
+      // Tối ưu hiệu năng: Nếu dữ liệu không đổi và bảng đã có dòng, chỉ lọc lại nhanh thay vì vẽ lại toàn bộ DOM
+      if (stored && stored === _lastLoadedActDataStr && tbody.querySelectorAll('tr:not(#no-activity-row)').length > 0) {
+        applyFilter(actHiddenFilter.value);
+        if (typeof renderMachineOverview === 'function') renderMachineOverview();
+        if (typeof renderReconciliationSummary === 'function') renderReconciliationSummary();
+        return;
+      }
+      _lastLoadedActDataStr = stored || '';
 
       // Đọc nguồn phát thải từ các biến thể key để kiểm tra tính sẵn sàng phân bổ ca máy
       let sources = [];
@@ -1235,7 +1245,17 @@
       const parseNum = (typeof window !== 'undefined' && typeof window.parseVnNumber === 'function') ? window.parseVnNumber : parseFloat;
       const hours = parseNum(inputOpHours?.value) || 0;
       const load = (parseNum(inputOpLoad?.value) || 100) / 100;
-      const rate = parseNum(inputOpRate?.value) || 0;
+      let rate = parseNum(inputOpRate?.value) || 0;
+      if (rate <= 0) {
+        const selectedOpt = sourceSelect.options[sourceSelect.selectedIndex];
+        rate = parseNum(selectedOpt?.dataset?.hourlyRate) || 0;
+        if (rate <= 0 && selectedOpt?.dataset?.opCapacity) {
+          const cap = parseNum(selectedOpt.dataset.opCapacity) || 0;
+          const ld = (parseNum(selectedOpt.dataset.opLoad) || 80) / 100;
+          if (cap > 0) rate = Math.round(cap * ld * 100) / 100;
+        }
+        if (rate > 0 && inputOpRate) inputOpRate.value = rate;
+      }
       const recordTypeEl = document.querySelector('input[name="act-record-type"]:checked');
       const recordType = recordTypeEl ? recordTypeEl.value : 'normal';
 
@@ -1980,6 +2000,7 @@
         recordType: isProcess ? 'actual_production' : recordType,
         downtimeHours: isDowntime ? (parseFloat(document.getElementById('input-op-hours')?.value) || 0) : 0,
         overtimeHours: isOvertime ? (parseFloat(document.getElementById('input-op-hours')?.value) || 0) : 0,
+        hourlyRate: document.getElementById('input-op-rate')?.value || currentEditingRow?.dataset?.hourlyRate || sourceSelect.options[sourceSelect.selectedIndex]?.dataset?.hourlyRate || '',
         stdHours: (currentEditingRow?.dataset?.stdHours || sourceSelect.options[sourceSelect.selectedIndex]?.dataset?.opHoursDay || '16'),
         isBaseline: isProcess ? 'false' : ((currentEditingRow && currentEditingRow.dataset.isBaseline === 'true') ? 'true' : 'false')
       };
@@ -2228,15 +2249,12 @@
                              docLower.includes('phiếu cân') ||
                              docLower.includes('sản lượng');
         
-        // Temporarily set filter to match this row so the modal populates correctly
+        // Open modal for this row without permanently overwriting user's page filter
         const rowType = data.sourceType || '';
-        actHiddenFilter.value = isRowProcess ? '' : rowType;
-        if (actFilterInput) actFilterInput.innerText = isRowProcess ? '-- Tất cả Nguồn --' : (rowType || '-- Tất cả Nguồn --');
-        
         if (isRowProcess) {
           openModal(null, true);
         } else {
-          openModal();
+          openModal(rowType, false);
         }
 
         const userRole = localStorage.getItem('gs_user_role') || 'engineer';
@@ -2346,6 +2364,21 @@
                 }
                 opHoursInput.value = stdH;
               }
+            }
+            if (inputOpRate) {
+              const selectedOpt = sourceSelect.options[sourceSelect.selectedIndex];
+              let rRate = data.hourlyRate || selectedOpt?.dataset?.hourlyRate;
+              if (!rRate || parseFloat(rRate) <= 0) {
+                const cap = parseFloat(selectedOpt?.dataset?.opCapacity) || 0;
+                const load = (parseFloat(selectedOpt?.dataset?.opLoad) || 80) / 100;
+                if (cap > 0) rRate = Math.round(cap * load * 100) / 100;
+                else {
+                  const stdH = parseFloat(data.stdHours) || parseFloat(selectedOpt?.dataset?.opHoursDay) || 16;
+                  const stdAmt = parseFloat(data.stdAmount) || parseFloat(data.amount) || 0;
+                  if (stdH > 0 && stdAmt > 0) rRate = Math.round((stdAmt / stdH) * 100) / 100;
+                }
+              }
+              inputOpRate.value = rRate || '';
             }
             calcFromHours();
           } else {
@@ -3770,12 +3803,8 @@
     const btnDayOffMenu = document.getElementById('btn-day-off-menu');
     const dayOffDropdown = document.getElementById('day-off-dropdown-menu');
     if (btnDayOffMenu && dayOffDropdown) {
-      btnDayOffMenu.addEventListener('click', (e) => {
-        e.stopPropagation();
-        const isOpen = dayOffDropdown.style.display === 'block';
-        dayOffDropdown.style.display = isOpen ? 'none' : 'block';
-      });
-
+      // Inline onclick window.toggleDayOffMenu(event) handles the toggle.
+      // Outside click listener closes the dropdown when clicking elsewhere.
       document.addEventListener('click', (e) => {
         if (!btnDayOffMenu.contains(e.target) && !dayOffDropdown.contains(e.target)) {
           dayOffDropdown.style.display = 'none';

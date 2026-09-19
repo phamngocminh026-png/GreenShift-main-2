@@ -1048,7 +1048,7 @@
                <button type="button" id="btn-import-equipment" class="btn btn-outline" style="background: #ffffff; color: var(--color-primary); border: 1px solid var(--color-primary); font-size: 0.85rem; padding: 0.5rem 0.9rem; border-radius: 6px; cursor: pointer;" title="Nhập danh mục thiết bị từ file Excel">
                  Tải thiết bị
                </button>
-               <button type="button" id="btn-seed-sample-quick" class="btn btn-secondary" style="background: #f0fdf4; color: #166534; border: 1px solid #bbf7d0; font-size: 0.85rem; padding: 0.5rem 0.9rem; border-radius: 6px; cursor: pointer; display: inline-flex; align-items: center; gap: 5px;" title="Nạp nhanh toàn bộ dữ liệu mẫu Nhà máy thép Hòa Bình 2026">
+               <button type="button" id="btn-seed-sample-quick" class="btn btn-secondary" style="background: #f0fdf4; color: #166534; border: 1px solid #bbf7d0; font-size: 0.85rem; padding: 0.5rem 0.9rem; border-radius: 6px; cursor: pointer; display: none; align-items: center; gap: 5px;" title="Nạp nhanh toàn bộ dữ liệu mẫu Nhà máy thép Hòa Bình 2026">
                  <span>Nạp mẫu chuẩn</span>
                </button>
                <button type="button" id="btn-smart-mapping-review" class="btn btn-secondary" style="background: #f0fdf4; color: #166534; border: 1px solid #bbf7d0; font-size: 0.85rem; padding: 0.5rem 0.9rem; border-radius: 6px; cursor: pointer; display: inline-flex; align-items: center; gap: 5px;" title="Xem và đối soát chuẩn hóa danh mục thiết bị với Cơ sở dữ liệu chuẩn GreenShift">
@@ -1057,7 +1057,7 @@
                <button type="button" id="btn-reset-eq-data" class="btn btn-secondary" style="background: #fff1f2; color: #be123c; border: 1px solid #fecdd3; font-size: 0.85rem; padding: 0.5rem 0.9rem; border-radius: 6px; cursor: pointer; white-space: nowrap;" title="Xóa dữ liệu hoạt động, thiết bị và nguồn để kiểm thử lại từ đầu">
                  Đặt lại dữ liệu test
                </button>
-               <button id="btn-add-equipment" class="btn btn-primary" style="display: none; font-size: 0.85rem; padding: 0.5rem 0.9rem; border-radius: 6px;">+ Thêm thiết bị</button>
+               <button id="btn-add-equipment" class="btn btn-primary" style="display: inline-flex; align-items: center; gap: 4px; font-size: 0.85rem; padding: 0.5rem 0.9rem; border-radius: 6px; cursor: pointer;">+ Thêm thiết bị</button>
              </div>
 
              <button class="btn btn-outline" id="btn-mat-settings-open" style="display: none; align-items: center; gap: 6px; padding: 0.5rem 1rem;">
@@ -2021,7 +2021,7 @@
       <form id="equipment-form">
         <div class="form-group">
           <label>Loại thiết bị <span style="color: red;">*</span></label>
-          <input type="text" id="eq-type" class="form-control" readonly required>
+          <input type="text" id="eq-type" class="form-control" placeholder="Nhập hoặc chọn loại thiết bị" required>
         </div>
         <div class="form-group">
           <label>Tên <span style="color: red;">*</span></label>
@@ -2040,8 +2040,8 @@
           <input type="text" id="eq-brand" class="form-control" placeholder="Vui lòng nhập thương hiệu">
         </div>
         <div class="form-group">
-          <label>Ngày mua thiết bị <span style="color: red;">*</span></label>
-          <input type="date" id="eq-date" class="form-control" required>
+          <label>Ngày mua thiết bị</label>
+          <input type="date" id="eq-date" class="form-control">
         </div>
       </form>
     </div>
@@ -2245,15 +2245,6 @@
           if (typeof window.loadActivityList === 'function') {
             try { window.loadActivityList(); } catch(e) {}
           }
-          if (typeof window.renderMachineOverview === 'function') {
-            try { window.renderMachineOverview(); } catch(e) {}
-          }
-          if (typeof window.renderReconciliationSummary === 'function') {
-            try { window.renderReconciliationSummary(); } catch(e) {}
-          }
-          if (typeof window.updateProductionReminderBanner === 'function') {
-            try { window.updateProductionReminderBanner(); } catch(e) {}
-          }
         } else if (target === 'view-report') {
           try { renderReport(); } catch(e) {}
         }
@@ -2354,10 +2345,16 @@
         if (actModeContainer) actModeContainer.style.display = '';
       }
 
-      // Bộ lọc chứng từ theo vai trò: Mặc định hiển thị tất cả dữ liệu để tránh bị ẩn nhầm số liệu
+      // Phân tách hiển thị theo vai trò: Kế toán chỉ xem hóa đơn, Kỹ sư chỉ xem ca kíp kỹ thuật
       const filterRoleEl = document.getElementById('act-filter-role');
       if (filterRoleEl) {
-        filterRoleEl.value = '';
+        if (role === 'accountant') {
+          filterRoleEl.value = 'accountant';
+        } else if (role === 'engineer') {
+          filterRoleEl.value = 'engineer';
+        } else {
+          filterRoleEl.value = '';
+        }
       }
 
       // Reset dropdown nguồn phát thải về "-- Tất cả Nguồn --" để không bị đơ hoặc kẹt bộ lọc cũ
@@ -3097,11 +3094,17 @@
     };
 
     btnAdd.addEventListener('click', () => {
-      // Extract the specific equipment type from the hidden source select
-      const sourcePath = document.getElementById('source-select').value.split(' > ');
-      eqTypeInput.value = sourcePath[sourcePath.length - 1];
-      // Store L1 category for later filtering
-      modal.dataset.category = sourcePath[0] || '';
+      const sourceVal = document.getElementById('source-select').value;
+      if (sourceVal) {
+        const sourcePath = sourceVal.split(' > ');
+        eqTypeInput.value = sourcePath[sourcePath.length - 1] || '';
+        modal.dataset.category = sourcePath[0] || '';
+      } else {
+        eqTypeInput.value = '';
+        modal.dataset.category = '';
+      }
+      eqTypeInput.readOnly = false;
+      eqTypeInput.placeholder = 'Nhập hoặc chọn loại thiết bị (Ví dụ: Máy nén khí, Lò hơi, Máy phát điện...)';
       openModal(false);
     });
 
@@ -3176,7 +3179,12 @@
         document.getElementById('eq-location').value = row.cells[2].innerText;
         document.getElementById('eq-asset').value = row.cells[3].innerText;
         document.getElementById('eq-brand').value = row.cells[4].innerText;
-        document.getElementById('eq-date').value = row.cells[5].innerText;
+        let rawEqDate = (row.cells[5].innerText || '').trim();
+        if (rawEqDate && rawEqDate.includes('/')) {
+          const parts = rawEqDate.split('/');
+          if (parts.length === 3) rawEqDate = `${parts[2]}-${parts[1].padStart(2, '0')}-${parts[0].padStart(2, '0')}`;
+        }
+        document.getElementById('eq-date').value = rawEqDate || new Date().toISOString().split('T')[0];
         openModal(true);
       });
       
@@ -4629,68 +4637,8 @@
                 console.warn('autoGenerateDailyOperationalRecords notice:', e);
               }
 
-              // Tự động bổ sung hóa đơn thanh toán kế toán định kỳ (EVN + Dầu) nếu chưa có cho năm đó
-              try {
-                let actList = JSON.parse(
-                  localStorage.getItem(slugActKey) ||
-                  localStorage.getItem(rawActKey) ||
-                  localStorage.getItem(actKey) ||
-                  '[]'
-                );
-                const hasInvoices = actList.some(a => a.isInvoice === 'true' && a.date && a.date.startsWith(impYear));
-                if (!hasInvoices) {
-                  const elecSrc = sourceList.find(s => (s.category && s.category.includes('điện')) || (s.type && s.type.toLowerCase().includes('điện')));
-                  const fuelSrc = sourceList.find(s => (s.category && s.category.includes('Đốt cháy')) || (s.type && (s.type.toLowerCase().includes('lò') || s.type.toLowerCase().includes('diesel'))));
-                  for (let m = 1; m <= 12; m++) {
-                    const mStr = String(m).padStart(2, '0');
-                    if (elecSrc) {
-                      const baseAmt = Math.round((parseFloat(elecSrc.annualEstQty) || 36000000) / 12);
-                      const fFactor = parseFloat(elecSrc.efFactor) || 0.6766;
-                      actList.push({
-                        id: `act_acc_${impYear}_${m}_elec`,
-                        date: `${impYear}-${mStr}-28`,
-                        sourceId: elecSrc.id,
-                        sourceName: elecSrc.name || `${elecSrc.category} - ${elecSrc.eq || elecSrc.type}`,
-                        sourceType: elecSrc.type || elecSrc.category || 'Tiêu thụ điện',
-                        amount: baseAmt.toString(),
-                        unit: 'kWh',
-                        finalFactor: fFactor.toString(),
-                        co2e: (baseAmt * fFactor).toFixed(2),
-                        doc: `HĐ-EVN-${impYear}-${mStr} - Điện lực Bà Rịa Vũng Tàu`,
-                        manager: 'Kế toán trưởng Nguyễn Thị Mai',
-                        entryRole: 'accountant',
-                        isInvoice: 'true',
-                        entryMode: 'direct',
-                        status: 'CONFIRMED'
-                      });
-                    }
-                    if (fuelSrc) {
-                      const baseAmt = Math.round((parseFloat(fuelSrc.annualEstQty) || 900000) / 12);
-                      const fFactor = parseFloat(fuelSrc.efFactor) || 3.151;
-                      actList.push({
-                        id: `act_acc_${impYear}_${m}_fuel`,
-                        date: `${impYear}-${mStr}-25`,
-                        sourceId: fuelSrc.id,
-                        sourceName: fuelSrc.name || `${fuelSrc.category} - ${fuelSrc.eq || fuelSrc.type}`,
-                        sourceType: fuelSrc.type || fuelSrc.category || 'Đốt cháy cố định',
-                        amount: baseAmt.toString(),
-                        unit: fuelSrc.opCapUnit || 'kg',
-                        finalFactor: fFactor.toString(),
-                        co2e: (baseAmt * fFactor).toFixed(2),
-                        doc: `HĐ-0098${mStr} - Công ty Xăng dầu Petrolimex`,
-                        manager: 'Kế toán kho Phạm Văn Bình',
-                        entryRole: 'accountant',
-                        isInvoice: 'true',
-                        entryMode: 'direct',
-                        status: 'CONFIRMED'
-                      });
-                    }
-                  }
-                  localStorage.setItem(actKey, JSON.stringify(actList));
-                  localStorage.setItem(slugActKey, JSON.stringify(actList));
-                  if (rawActKey !== slugActKey) {
-                    localStorage.setItem(rawActKey, JSON.stringify(actList));
-                  }
+              // Kế toán tự nhập hoặc tải lên hóa đơn thực tế (không tự sinh hóa đơn giả lập)
+              
                 }
               } catch(e) {
                 console.warn('Auto invoice provisioning notice:', e);
@@ -5231,7 +5179,23 @@
               const procDaysEl = document.getElementById('source-proc-days-week');
               if (procDaysEl) procDaysEl.value = row.dataset.opDaysWeek || '6';
             } else {
-              document.getElementById('source-measure').value = row.dataset.measure || '';
+              // Smart mapping for measure
+              let mVal = row.dataset.measure || '';
+              const mLower = mVal.toLowerCase();
+              if (!mVal || mLower.includes('ước tính') || mLower.includes('tự đánh giá') || mLower.includes('kỹ thuật') || mLower.includes('công suất')) {
+                mVal = 'Tự đánh giá';
+              } else if (mLower.includes('liên tục') || mLower.includes('đồng hồ') || mLower.includes('công tơ')) {
+                mVal = 'Đo liên tục';
+              } else if (mLower.includes('sản phẩm') || mLower.includes('sản lượng')) {
+                mVal = 'Theo sản lượng sản phẩm';
+              } else if (mLower.includes('kế toán') || mLower.includes('hóa đơn')) {
+                mVal = 'Ước tính kế toán tài chính';
+              } else if (mLower.includes('định kỳ')) {
+                mVal = 'Đo định kỳ (không liên tục)';
+              } else {
+                mVal = 'Tự đánh giá';
+              }
+              document.getElementById('source-measure').value = mVal;
             }
 
             if (document.getElementById('source-op-capacity')) document.getElementById('source-op-capacity').value = row.dataset.opCapacity || '';
@@ -5242,9 +5206,36 @@
             if (document.getElementById('source-meter-id')) document.getElementById('source-meter-id').value = row.dataset.meterId || '';
             if (document.getElementById('source-meter-mult')) document.getElementById('source-meter-mult').value = row.dataset.meterMult || '1';
             updateSourceMeasureUI();
-            document.getElementById('source-reliability').value = row.dataset.reliability || '';
+            
+            // Smart mapping for reliability
+            let rVal = row.dataset.reliability || '';
+            const rLower = rVal.toLowerCase();
+            if (!rVal || rLower.includes('thứ cấp') || rLower.includes('kỹ thuật') || rLower.includes('tham khảo')) {
+              rVal = 'Dữ liệu thứ cấp / Tham khảo';
+            } else if (rLower.includes('hóa đơn') || rLower.includes('kế toán') || rLower.includes('chứng từ') || rLower.includes('bằng chứng')) {
+              rVal = 'Bằng chứng kế toán / Hóa đơn';
+            } else if (rLower.includes('không')) {
+              rVal = 'Không có bằng chứng rõ ràng';
+            } else {
+              rVal = 'Dữ liệu thứ cấp / Tham khảo';
+            }
+            document.getElementById('source-reliability').value = rVal;
             document.getElementById('source-biomass').value = row.dataset.biomass || 'Không';
-            document.getElementById('source-start-date').value = row.dataset.startDate || '';
+            document.getElementById('source-start-date').value = row.dataset.startDate || '2026-01-01';
+            
+            // Nhiên liệu chỉ bắt buộc đối với Đốt cháy, không bắt buộc đối với Tiêu thụ điện và Phát thải rò rỉ
+            const isElecOrRef = (currentSourceCategory === 'Tiêu thụ điện' || currentSourceCategory === 'Phát thải thất thoát' || (row.dataset.type || '').toLowerCase().includes('điện'));
+            const fuelEl = document.getElementById('source-fuel');
+            if (fuelEl) {
+              const fuelGroup = fuelEl.closest('.form-group');
+              if (isElecOrRef) {
+                fuelEl.required = false;
+                if (fuelGroup) fuelGroup.style.display = 'none';
+              } else {
+                fuelEl.required = true;
+                if (fuelGroup) fuelGroup.style.display = 'block';
+              }
+            }
             document.getElementById('source-ef-factor').value = row.dataset.efFactor || '';
             document.getElementById('source-ef-unit').value = row.dataset.efUnit || '';
             document.getElementById('source-ef-source').value = row.dataset.efSource || '';
@@ -5665,7 +5656,7 @@
       col2.innerHTML = '';
       col3.innerHTML = '';
       // Tab "Thiết bị" chỉ quản lý tài sản Scope 1 của doanh nghiệp
-      const SCOPE1_CATS = ['Đốt cháy cố định', 'Đốt cháy động', 'Phát thải thất thoát', 'Các quá trình công nghiệp', 'Sử dụng đất, thay đổi sử dụng đất và lâm nghiệp (LULUCF)'];
+      const SCOPE1_CATS = ['Đốt cháy cố định', 'Đốt cháy động', 'Phát thải thất thoát', 'Các quá trình công nghiệp', 'Điện mua vào', 'Năng lượng mua vào (hơi, nhiệt)', 'Sử dụng đất, thay đổi sử dụng đất và lâm nghiệp (LULUCF)'];
       Object.keys(dropdownData).filter(key => SCOPE1_CATS.includes(key)).forEach(key => {
         const div = document.createElement('div');
         div.className = 'dropdown-item';

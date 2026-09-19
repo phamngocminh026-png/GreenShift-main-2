@@ -965,7 +965,9 @@ CREATE TABLE IF NOT EXISTS public.reconciliation_records (
     approved_at TIMESTAMPTZ,
     attribution_details TEXT,
     reconciled_by VARCHAR(100),
-    reconciled_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP
+    reconciled_at TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT chk_recon_approved CHECK (status != 'APPROVED' OR (approved_by IS NOT NULL AND approved_at IS NOT NULL)),
+    CONSTRAINT chk_recon_distinct_approver CHECK (status != 'APPROVED' OR reconciled_by IS NULL OR approved_by IS NULL OR reconciled_by != approved_by)
 );
 CREATE INDEX IF NOT EXISTS idx_recon_facility ON public.reconciliation_records(facility_id);
 CREATE INDEX IF NOT EXISTS idx_recon_period ON public.reconciliation_records(period);
@@ -1580,6 +1582,21 @@ CREATE TRIGGER trg_audit_activity_productions
 DROP TRIGGER IF EXISTS trg_audit_equipment_logs ON public.equipment_logs;
 CREATE TRIGGER trg_audit_equipment_logs
     AFTER INSERT OR UPDATE OR DELETE ON public.equipment_logs
+    FOR EACH ROW EXECUTE FUNCTION public.fn_audit_log_changes();
+
+DROP TRIGGER IF EXISTS trg_audit_reconciliation_records ON public.reconciliation_records;
+CREATE TRIGGER trg_audit_reconciliation_records
+    AFTER INSERT OR UPDATE OR DELETE ON public.reconciliation_records
+    FOR EACH ROW EXECUTE FUNCTION public.fn_audit_log_changes();
+
+DROP TRIGGER IF EXISTS trg_audit_cbam_dossiers ON public.cbam_dossiers;
+CREATE TRIGGER trg_audit_cbam_dossiers
+    AFTER INSERT OR UPDATE OR DELETE ON public.cbam_dossiers
+    FOR EACH ROW EXECUTE FUNCTION public.fn_audit_log_changes();
+
+DROP TRIGGER IF EXISTS trg_audit_equipments ON public.equipments;
+CREATE TRIGGER trg_audit_equipments
+    AFTER INSERT OR UPDATE OR DELETE ON public.equipments
     FOR EACH ROW EXECUTE FUNCTION public.fn_audit_log_changes();
 
 -- 5.2 Period Lock Guard (Chặn chỉnh sửa số liệu đã khóa sổ kỳ kiểm kê)

@@ -42,16 +42,28 @@ class TestSecurityAuditV3(unittest.TestCase):
 
     def test_login_backdoor_eliminated(self):
         """Khẳng định cửa hậu hardcoded đã bị gỡ bỏ hoàn toàn"""
-        os.environ['GREENSHIFT_ADMIN_USER'] = 'valid_admin_2026'
-        os.environ['GREENSHIFT_ADMIN_PASS'] = 'SuperSecretPass@999'
+        old_user = os.environ.get('GREENSHIFT_ADMIN_USER')
+        old_pass = os.environ.get('GREENSHIFT_ADMIN_PASS')
+        try:
+            os.environ['GREENSHIFT_ADMIN_USER'] = 'valid_admin_2026'
+            os.environ['GREENSHIFT_ADMIN_PASS'] = 'SuperSecretPass@999'
 
-        # Tài khoản hardcoded cũ phải bị từ chối 401
-        res_old = self.client.post('/api/login', json={'username': 'greenshiftacl2026', 'password': '1234'})
-        self.assertEqual(res_old.status_code, 401, "Cửa hậu cũ phải bị từ chối 401 Unauthorized")
+            # Tài khoản hardcoded cũ phải bị từ chối 401
+            res_old = self.client.post('/api/login', json={'username': 'greenshiftacl2026', 'password': '1234'})
+            self.assertEqual(res_old.status_code, 401, "Cửa hậu cũ phải bị từ chối 401 Unauthorized")
 
-        # Tài khoản theo biến môi trường phải đăng nhập thành công 200
-        res_valid = self.client.post('/api/login', json={'username': 'valid_admin_2026', 'password': 'SuperSecretPass@999'})
-        self.assertEqual(res_valid.status_code, 200, "Thông tin quản trị hợp lệ phải được 200 OK")
+            # Tài khoản theo biến môi trường phải đăng nhập thành công 200
+            res_valid = self.client.post('/api/login', json={'username': 'valid_admin_2026', 'password': 'SuperSecretPass@999'})
+            self.assertEqual(res_valid.status_code, 200, "Thông tin quản trị hợp lệ phải được 200 OK")
+        finally:
+            if old_user is not None:
+                os.environ['GREENSHIFT_ADMIN_USER'] = old_user
+            else:
+                os.environ.pop('GREENSHIFT_ADMIN_USER', None)
+            if old_pass is not None:
+                os.environ['GREENSHIFT_ADMIN_PASS'] = old_pass
+            else:
+                os.environ.pop('GREENSHIFT_ADMIN_PASS', None)
 
     def test_ec_label_mapping(self):
         """Khẳng định nhãn nhiên liệu và nguyên liệu được ánh xạ đúng chuẩn EU"""

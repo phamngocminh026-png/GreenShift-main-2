@@ -33,11 +33,12 @@ function checkVnPublicHoliday(dateStr) {
 }
 
 function renderDashboard() {
-  const username = localStorage.getItem('gs_current_user') || 'guest';
+  const rawUser = (localStorage.getItem('gs_current_user') || 'guest').trim();
+  const userSlug = rawUser.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '') || 'guest';
   const branchEl = document.getElementById('branch-selector');
   const branchName = (branchEl && branchEl.value) ? branchEl.value : 'main';
-  const branchKey = branchName.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
-  const storageKey = `gs_data_${username}_${branchKey}_activity`;
+  const branchKey = branchName.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '') || 'main';
+  const storageKey = `gs_data_${userSlug}_${branchKey}_activity`;
   
   const yearEl = document.getElementById('dash-year-select');
   const selectedYear = (yearEl && yearEl.value) ? yearEl.value : new Date().getFullYear().toString();
@@ -123,7 +124,15 @@ function renderDashboard() {
     }
   }
 
-  const activities = JSON.parse(localStorage.getItem(storageKey) || '[]');
+  let activities = JSON.parse(localStorage.getItem(storageKey) || '[]');
+  if (activities.length === 0) {
+    const rawKey = `gs_data_${rawUser}_${branchKey}_activity`;
+    const altKeys = [rawKey, `gs_data_${userSlug}_tru_so_chinh_activity`, `gs_data_${rawUser}_tru_so_chinh_activity`, `gs_data_guest_tru_so_chinh_activity`, `gs_v2_activity_main`];
+    for (const ak of altKeys) {
+      const cand = JSON.parse(localStorage.getItem(ak) || '[]');
+      if (cand && cand.length > 0) { activities = cand; break; }
+    }
+  }
   
   // Filter by year and YTD
   const filtered = activities.filter(act => {
@@ -133,7 +142,15 @@ function renderDashboard() {
   });
   
   // Load sources to get correct Scope mappings
-  const sources = JSON.parse(localStorage.getItem(`gs_data_${username}_${branchKey}_sources`) || '[]');
+  let sources = JSON.parse(localStorage.getItem(`gs_data_${userSlug}_${branchKey}_sources`) || '[]');
+  if (sources.length === 0) {
+    const rawKey = `gs_data_${rawUser}_${branchKey}_sources`;
+    const altKeys = [rawKey, `gs_data_${userSlug}_tru_so_chinh_sources`, `gs_data_${rawUser}_tru_so_chinh_sources`, `gs_data_guest_tru_so_chinh_sources`];
+    for (const ak of altKeys) {
+      const cand = JSON.parse(localStorage.getItem(ak) || '[]');
+      if (cand && cand.length > 0) { sources = cand; break; }
+    }
+  }
   const sourceMap = {};
   const sourceTypeMap = {};
   const sourceDaysWeekMap = {};

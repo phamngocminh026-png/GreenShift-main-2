@@ -608,6 +608,31 @@ const Calculator = {
       }
     );
 
+    // Spend-based fallback / EEIO method cho Cat.1
+    const spendVnd = this.num(inputs.s3c1_spend_million_vnd || inputs.s3c1_spend_amount);
+    const spendEf = this.num(inputs.s3c1_spend_ef || 0.45); // ~0.45 tCO2e / trieu VND
+    if (spendVnd > 0 && spendEf > 0) {
+      const spendEmission = spendVnd * spendEf;
+      total += spendEmission;
+      this.addCategory(byCat, 1, spendEmission);
+      breakdown.push({
+        source: 'Hàng hóa mua vào (Dựa trên chi tiêu EEIO)',
+        category: 1,
+        quantity: spendVnd,
+        unit: 'Triệu VNĐ',
+        emission: this.round(spendEmission)
+      });
+    }
+
+    total += this.addDirectCategory(
+      inputs,
+      breakdown,
+      byCat,
+      1,
+      's3c1_direct_tco2e',
+      'Hàng hóa và dịch vụ mua vào'
+    );
+
     // -------------------------------------------------------
     // Cat.2 Capital goods
     //

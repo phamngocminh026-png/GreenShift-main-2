@@ -24,15 +24,15 @@ const charcoal = fuels.charcoal;
 
 assert.ok(wood, 'Phải tồn tại biomass_wood trong EF_MASTER');
 assert.strictEqual(wood.isBiogenic, true, 'biomass_wood phải có isBiogenic: true');
-assert.strictEqual(wood.factor, 0.038, 'biomass_wood Scope 1 non-CO2 factor phải là 0.038 kgCO2e/kg');
+assert.strictEqual(wood.factor, 0.1356, 'biomass_wood Scope 1 non-CO2 factor phải là 0.1356 kgCO2e/kg theo IPCC');
 assert.strictEqual(wood.biogenic_factor, 1.7472, 'biomass_wood biogenic_factor phải là 1.7472 kgCO2/kg (1.7472 tCO2/tấn)');
-console.log('  ✅ [PASS] biomass_wood: Scope 1 factor = 0.038 kgCO2e/kg, Biogenic = 1.7472 kgCO2/kg');
+console.log('  ✅ [PASS] biomass_wood: Scope 1 factor = 0.1356 kgCO2e/kg, Biogenic = 1.7472 kgCO2/kg');
 
 assert.ok(pellet, 'Phải tồn tại biomass_pellet trong EF_MASTER');
 assert.strictEqual(pellet.isBiogenic, true, 'biomass_pellet phải có isBiogenic: true');
-assert.strictEqual(pellet.factor, 0.035, 'biomass_pellet Scope 1 non-CO2 factor phải là 0.035 kgCO2e/kg');
+assert.strictEqual(pellet.factor, 0.1521, 'biomass_pellet Scope 1 non-CO2 factor phải là 0.1521 kgCO2e/kg theo IPCC');
 assert.strictEqual(pellet.biogenic_factor, 1.9600, 'biomass_pellet biogenic_factor phải là 1.9600 kgCO2/kg');
-console.log('  ✅ [PASS] biomass_pellet: Scope 1 factor = 0.035 kgCO2e/kg, Biogenic = 1.9600 kgCO2/kg');
+console.log('  ✅ [PASS] biomass_pellet: Scope 1 factor = 0.1521 kgCO2e/kg, Biogenic = 1.9600 kgCO2/kg');
 
 assert.ok(charcoal, 'Phải tồn tại charcoal trong EF_MASTER');
 assert.strictEqual(charcoal.isBiogenic, true, 'charcoal phải có isBiogenic: true');
@@ -45,7 +45,7 @@ const woodBioTon = efMaster.CALC.calculateBiogenicCO2('biomass_wood', 10000); //
 assert.strictEqual(woodBioTon, 17.472, '10,000 kg củi phải tạo 17.472 tấn biogenic CO2');
 
 const woodScope1Ton = efMaster.CALC.calculateScope1Fuel('biomass_wood', 10000); // 10 tấn củi
-assert.strictEqual(woodScope1Ton, 0.38, '10,000 kg củi chỉ tính 0.38 tCO2e vào Scope 1 trực tiếp');
+assert.strictEqual(Math.round(woodScope1Ton * 1000) / 1000, 1.356, '10,000 kg củi chỉ tính 1.356 tCO2e vào Scope 1 trực tiếp theo IPCC');
 console.log(`  ✅ [PASS] 10 tấn củi: Scope 1 = ${woodScope1Ton} tCO2e, Biogenic CO2 = ${woodBioTon} tCO2`);
 
 // TEST 3: Kiểm tra tính năng lượng TJ theo IPCC 2006

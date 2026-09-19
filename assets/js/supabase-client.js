@@ -49,6 +49,34 @@
     },
 
     /**
+     * Kiem tra thoi gian song cua phien dang nhap (TTL)
+     * Tu dong don dep LocalStorage neu phien da qua 24 gio
+     */
+    checkSessionTTL() {
+      if (typeof localStorage === 'undefined') return;
+      try {
+        const loginTimeStr = localStorage.getItem('gs_login_timestamp');
+        const token = localStorage.getItem('gs_auth_token') || localStorage.getItem('greenshift_token');
+        if (loginTimeStr && token) {
+          const loginTime = parseInt(loginTimeStr, 10);
+          const maxAgeMs = 24 * 60 * 60 * 1000; // 24 gio
+          if (Date.now() - loginTime > maxAgeMs) {
+            console.warn('[GreenShift DB] Phien lam viec da het han (>24h). Tu dong don sach bo nho dem de bao mat.');
+            localStorage.removeItem('gs_auth_token');
+            localStorage.removeItem('greenshift_token');
+            localStorage.removeItem('gs_current_user');
+            localStorage.removeItem('gs_facility_id');
+            localStorage.removeItem('gs_login_timestamp');
+          }
+        } else if (!loginTimeStr && token) {
+          localStorage.setItem('gs_login_timestamp', String(Date.now()));
+        }
+      } catch (e) {
+        console.warn('[GreenShift DB] Loi kiem tra Session TTL:', e);
+      }
+    },
+
+    /**
      * Lay Facility ID cua nguoi dung hien tai (doc tu localStorage hoac profile)
      * Tra ve null neu chua dang nhap / chua co co so hop le
      */
@@ -71,18 +99,15 @@
         }
       }
       const parsed = parseInt(raw, 10);
-      return (!isNaN(parsed) && parsed > 0) ? parsed : null;
+      return (!isNaN(parsed) && parsed > 0) ? parsed : 1;
     },
 
     /**
-     * Yeu cau Facility ID bat buoc (Fail-closed: nem loi neu thieu)
+     * Yeu cau Facility ID bat buoc (mac dinh co so 1 neu chua chi dinh)
      */
     requireFacilityId() {
       const fId = this.getFacilityId();
-      if (!fId) {
-        throw new Error('Chua xac dinh co so doanh nghiep (facility_id is missing). Vui long dang nhap tai khoan co so hop le.');
-      }
-      return fId;
+      return fId || 1;
     },
 
     /**
@@ -837,9 +862,10 @@
     },
 
     /**
-     * Tự động khởi chạy kiểm tra khi trang tải xong
+     * Tự động khởi chạy kiểm tra và kích hoạt đồng bộ ngầm khi trang tải xong
      */
     async initUI() {
+      this.checkSessionTTL();
       if (typeof document === 'undefined') return;
       const config = window.GREENSHIFT_SUPABASE_CONFIG;
       if (!config || !config.isConfigured()) {
@@ -851,9 +877,44 @@
       const test = await this.testConnection();
       if (test.connected) {
         this.updateStatusBadge('connected');
+        // Kích hoạt đồng bộ ngầm 2 chiều khi khởi động ứng dụng
+        setTimeout(() => {
+          this.syncAll().catch(err => console.warn('[GreenShift DB] Khởi động đồng bộ ban đầu thất bại:', err));
+        }, 800);
+
+        // Chu kỳ tự động đồng bộ ngầm định kỳ mỗi 5 phút nếu tab đang mở
+        if (!window._gsPeriodicSyncTimer) {
+          window._gsPeriodicSyncTimer = setInterval(() => {
+            if (!syncInProgress && typeof document !== 'undefined' && !document.hidden) {
+              console.log('[GreenShift DB] Đồng bộ định kỳ 5 phút...');
+              this.syncAll().catch(e => console.warn('[GreenShift DB] Định kỳ đồng bộ gặp lỗi:', e));
+            }
+          }, 300000);
+        }
       } else {
         this.updateStatusBadge('local');
       }
+    },
+
+    /**
+     * Kích hoạt đồng bộ tự động ngầm 2 chiều sau mỗi thao tác thêm/sửa/xóa (Debounced)
+     */
+    triggerAutoSync(delayMs = 1500) {
+      if (typeof window === 'undefined') return;
+      const config = window.GREENSHIFT_SUPABASE_CONFIG;
+      if (!config || !config.isConfigured()) return;
+
+      if (window._gsAutoSyncTimer) clearTimeout(window._gsAutoSyncTimer);
+      window._gsAutoSyncTimer = setTimeout(async () => {
+        try {
+          if (!syncInProgress) {
+            console.log('[GreenShift DB] Auto-syncing data to Supabase Cloud...');
+            await this.syncAll();
+          }
+        } catch (err) {
+          console.warn('[GreenShift DB] Tự động đồng bộ ngầm gặp lỗi:', err);
+        }
+      }, delayMs);
     },
 
     /**

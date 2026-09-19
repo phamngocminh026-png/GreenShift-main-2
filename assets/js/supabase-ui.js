@@ -289,12 +289,19 @@
       window.GreenShiftDB.resetClient();
 
       const res = await window.GreenShiftDB.testConnection();
+      const safeEscape = (text) => {
+        if (!text) return '';
+        const div = document.createElement('div');
+        div.textContent = String(text);
+        return div.innerHTML;
+      };
+
       if (res.connected) {
-        if (statusText) statusText.innerHTML = `<span class="status-indicator-dot dot-green" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#16a34a;margin-right:6px;"></span><strong>Thành công!</strong> ${res.message}`;
+        if (statusText) statusText.innerHTML = `<span class="status-indicator-dot dot-green" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#16a34a;margin-right:6px;"></span><strong>Thành công!</strong> ${safeEscape(res.message)}`;
         if (statusSub) statusSub.textContent = 'Đã đối soát thành công bảng facilities. Sẵn sàng đồng bộ.';
         window.GreenShiftDB.updateStatusBadge('connected');
       } else {
-        if (statusText) statusText.innerHTML = `<span class="status-indicator-dot dot-red" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#dc2626;margin-right:6px;"></span><strong>Lỗi kết nối:</strong> ${res.error}`;
+        if (statusText) statusText.innerHTML = `<span class="status-indicator-dot dot-red" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#dc2626;margin-right:6px;"></span><strong>Lỗi kết nối:</strong> ${safeEscape(res.error)}`;
         if (statusSub) statusSub.textContent = 'Vui lòng kiểm tra lại URL/Key hoặc chạy file greenshift_supabase.sql trên Supabase.';
         window.GreenShiftDB.updateStatusBadge('error');
       }

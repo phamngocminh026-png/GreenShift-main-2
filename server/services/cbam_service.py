@@ -9,7 +9,7 @@ import re
 logger = logging.getLogger(__name__)
 
 # Hệ số phát thải lưới điện Việt Nam chuẩn
-VN_GRID_EF_QD2626 = 0.6766       # Quyết định 2626/QĐ-BCT (Kiểm kê KNK nội địa)
+VN_GRID_EF_QD2626 = 0.6766       # Quyết định 2626/QĐ-BTNMT (Bộ Tài nguyên và Môi trường - Kiểm kê KNK nội địa)
 VN_GRID_EF_CBAM_DEFAULT = 0.7221 # Giá trị mặc định EC CBAM theo Công văn 263/BĐKH (Báo cáo CBAM chính thức)
 
 # Hệ số tham chiếu nhiệt chuẩn theo Annex IV CBAM Implementing Regulation (EU) 2023/1773 & EU ETS benchmark
@@ -20,12 +20,30 @@ def parse_num(val, default=0.0):
         return float(default)
     if isinstance(val, (int, float)):
         return float(val)
-    s = str(val).strip().replace(' ', '')
+    
+    # Chuẩn hóa khoảng trắng bao gồm cả Unicode space (\u00a0, \u200b, \u202f, \s)
+    s = re.sub(r'[\s\u00a0\u200b\u202f]+', '', str(val).strip())
     if not s or s == '-':
         return float(default)
     
+    is_negative = False
+    # Xử lý định dạng số âm kế toán trong ngoặc đơn (ví dụ: (1,234.56) hoặc (12.5))
+    if s.startswith('(') and s.endswith(')'):
+        is_negative = True
+        s = s[1:-1].strip()
+    elif s.startswith('-'):
+        is_negative = True
+        s = s[1:].strip()
+    elif s.startswith('+'):
+        s = s[1:].strip()
+    
+    if not s:
+        return float(default)
+
     # Bóc tách các hậu tố đơn vị phổ biến nếu có
     s = re.sub(r'(?i)(tco2e|tco2|kwh|mwh|vnd|vnđ|lit|lít|kg|tan|tấn|tj)$', '', s).strip()
+    if not s:
+        return float(default)
     
     comma_idx = s.rfind(',')
     dot_idx = s.rfind('.')
@@ -50,7 +68,8 @@ def parse_num(val, default=0.0):
         s = s.replace(',', '.')
         
     try:
-        return float(s)
+        res = float(s)
+        return -res if is_negative else res
     except (ValueError, TypeError):
         return float(default)
 
@@ -521,23 +540,35 @@ def process_internal_audit_report(data):
         wastewater = data.get('wastewater', [])
         heats = data.get('heatExchanges', [])
         elecMwh = parse_num(data.get('elecMwh', 0))
-        # Cập nhật hệ số lưới điện VN mới nhất (0.7221 theo CV 263/CBAM default hoặc 0.6766 theo QĐ 2626)
-        elecEf = parse_num(data.get('elecEf', VN_GRID_EF_CBAM_DEFAULT)) 
+        # Cập nhật hệ số lưới điện VN mới nhất (0.7221 theo CV 263/CBAM default hoặc 0.6766 theo QĐ 2626/QĐ-BTNMT)
+        elec_method = data.get('elecMethod', 'cbam_default')
+        default_ef = VN_GRID_EF_QD2626 if elec_method == 'domestic_qd2626' else VN_GRID_EF_CBAM_DEFAULT
+        elecEf = parse_num(data.get('elecEf', default_ef)) 
         precursors = data.get('precursors', [])
         al_val = parse_num(data.get('al', 0))
         
-        # Cộng dồn Phát thải trực tiếp (Direct Emissions)
+        # Cộng dồn Phát thải trực tiếp (CBAM Direct Emissions - Nhiên liệu, Quá trình, Rò rỉ, Nước thải & Nhập nhiệt quy thuộc)
         for f in fuels: total_direct += parse_num(f.get('tco2e', 0))
         for p in procs: total_direct += parse_num(p.get('tco2e', 0))
         for r in refrigerants: total_direct += parse_num(r.get('tco2e', 0))
         for w in wastewater: total_direct += parse_num(w.get('tco2e', 0))
         
-        # Cộng dồn Phát thải gián tiếp năng lượng (Indirect Emissions)
-        total_indirect += (elecMwh * elecEf)
+        # Trao đổi nhiệt đo đếm được (Theo Annex III & IV Quy chế (EU) 2023/1773:
+        # Nhiệt đo đếm được nhập khẩu tính vào phát thải trực tiếp quy thuộc AttrEm_dir)
+        total_heat_emissions = 0.0
         for h in heats: 
             h_val = parse_num(h.get('tco2e', 0))
-            if h_val > 0: # Nhập nhiệt tính vào phát thải gián tiếp
-                total_indirect += h_val
+            total_heat_emissions += h_val
+        total_direct += total_heat_emissions
+        
+        # Cộng dồn Phát thải gián tiếp CBAM (CBAM Indirect Emissions - Tiêu thụ điện năng AttrEm_indir)
+        total_indirect = (elecMwh * elecEf)
+
+        # Hỗ trợ tương thích nếu payload dạng tổng hợp tóm tắt (không có mảng chi tiết)
+        if total_direct == 0.0 and data.get('totalScope1'):
+            total_direct = parse_num(data.get('totalScope1', 0))
+        if total_indirect == 0.0 and data.get('totalScope2'):
+            total_indirect = parse_num(data.get('totalScope2', 0))
         
         # Cộng dồn Phát thải tích luỹ tiền chất (Precursor Embedded Emissions)
         for prec in precursors:
@@ -550,15 +581,23 @@ def process_internal_audit_report(data):
             total_precursors += amt * (see_dir + see_indir)
             
         total_emissions = total_direct + total_indirect + total_precursors
+
+        # Guard clause: Tính toán Suất phát thải riêng (SEE) an toàn khi AL <= 0
+        calculated_see = round(total_emissions / al_val, 4) if al_val > 0 else 0.0
+        if not data.get('seeTotal'):
+            ws['B12'] = calculated_see
+        if al_val <= 0:
+            ws['C10'] = "LƯU Ý: AL <= 0 (Ngừng hoạt động / Kỳ bảo dưỡng)"
+            ws['B12'] = 0.0
         
         # --- BẢNG TỔNG HỢP ĐỐI SOÁT CBAM ---
         current_row = 15
-        ws.cell(row=current_row, column=1, value="BẢNG TỔNG HỢP ĐỐI SOÁT CBAM (CBAM EMISSIONS SUMMARY)")
+        ws.cell(row=current_row, column=1, value="BẢNG TỔNG HỢP ĐỐI SOÁT CBAM / CBAM EMISSIONS SUMMARY")
         ws.merge_cells(start_row=current_row, start_column=1, end_row=current_row, end_column=6)
         current_row += 1
-        ws.cell(row=current_row, column=1, value="Phân loại ranh giới (CBAM Boundary)")
-        ws.cell(row=current_row, column=2, value="Tổng phát thải (tCO2e)")
-        ws.cell(row=current_row, column=3, value="Tỷ trọng (%)")
+        ws.cell(row=current_row, column=1, value="Phân loại ranh giới / CBAM Boundary")
+        ws.cell(row=current_row, column=2, value="Tổng phát thải / Total Emissions (tCO2e)")
+        ws.cell(row=current_row, column=3, value="Tỷ trọng / Share (%)")
         current_row += 1
         
         def safe_pct(part, total):
@@ -566,11 +605,11 @@ def process_internal_audit_report(data):
                 return "0.0%"
             return f"{(part / total) * 100:.1f}%"
             
-        ws.cell(row=current_row, column=1, value="Phát thải trực tiếp (Direct Emissions - Nhiên liệu, Công nghệ, Rò rỉ)")
+        ws.cell(row=current_row, column=1, value="Phát thải trực tiếp CBAM (Direct Emissions - Nhiên liệu, Công nghệ, Rò rỉ, Nhập nhiệt quy thuộc)")
         ws.cell(row=current_row, column=2, value=round(total_direct, 4))
         ws.cell(row=current_row, column=3, value=safe_pct(total_direct, total_emissions))
         current_row += 1
-        ws.cell(row=current_row, column=1, value="Phát thải gián tiếp (Indirect Emissions - Điện lưới, Nhập nhiệt)")
+        ws.cell(row=current_row, column=1, value="Phát thải gián tiếp CBAM (Indirect Emissions - Điện lưới tiêu thụ)")
         ws.cell(row=current_row, column=2, value=round(total_indirect, 4))
         ws.cell(row=current_row, column=3, value=safe_pct(total_indirect, total_emissions))
         current_row += 1
@@ -653,7 +692,7 @@ def process_internal_audit_report(data):
             
         # --- CHI TIẾT PHÁT THẢI GIÁN TIẾP ---
         current_row += 1
-        ws.cell(row=current_row, column=1, value="CHI TIẾT PHÁT THẢI GIÁN TIẾP (INDIRECT EMISSIONS - ELECTRICITY & HEAT)")
+        ws.cell(row=current_row, column=1, value="CHI TIẾT PHÁT THẢI GIÁN TIẾP CBAM (INDIRECT EMISSIONS - ELECTRICITY)")
         ws.merge_cells(start_row=current_row, start_column=1, end_row=current_row, end_column=6)
         current_row += 1
         
@@ -670,19 +709,20 @@ def process_internal_audit_report(data):
         current_row += 2
         
         if heats:
-            ws.cell(row=current_row, column=1, value="- Trao đổi Nhiệt (Heat Import/Export)")
+            ws.cell(row=current_row, column=1, value="- Trao đổi Nhiệt đo đếm được (Measurable Heat - Tính vào AttrEm_dir theo Annex IV CBAM)")
             current_row += 1
-            headers = ["Loại hình", "Lượng nhiệt (MWh/TJ)", "Đơn vị", "Hệ số phát thải", "Ranh giới", "Phát thải (tCO2e)"]
+            headers = ["Loại hình", "Lượng nhiệt (MWh/TJ)", "Đơn vị", "Hệ số phát thải", "Ranh giới quy chuẩn", "Phát thải (tCO2e)"]
             for col, header in enumerate(headers, 1): ws.cell(row=current_row, column=col, value=header)
             current_row += 1
             for heat in heats:
                 tco2e = parse_num(heat.get('tco2e', 0))
-                heat_type = "Nhập nhiệt (Tính vào Scope 2)" if tco2e > 0 else "Xuất nhiệt (Giảm trừ)"
+                heat_type = "Nhập nhiệt (Imported Heat)" if tco2e >= 0 else "Xuất nhiệt (Exported Heat)"
+                boundary_label = "CBAM Direct (Annex IV) / ISO Scope 2" if tco2e >= 0 else "CBAM Deduction"
                 ws.cell(row=current_row, column=1, value=heat_type)
                 ws.cell(row=current_row, column=2, value=parse_num(heat.get('qty', 0)))
                 ws.cell(row=current_row, column=3, value=heat.get('unit', 'MWh'))
                 ws.cell(row=current_row, column=4, value=parse_num(heat.get('ef', 0)))
-                ws.cell(row=current_row, column=5, value=heat.get('boundary', 'Scope 2' if tco2e > 0 else 'Deduction'))
+                ws.cell(row=current_row, column=5, value=heat.get('boundary', boundary_label))
                 ws.cell(row=current_row, column=6, value=tco2e)
                 current_row += 1
             current_row += 1

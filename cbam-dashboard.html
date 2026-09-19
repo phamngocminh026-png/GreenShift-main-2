@@ -99,6 +99,10 @@
             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
             EU CBAM 2023/1773 &amp; Corrigendum 06/08/2024
           </span>
+          <span style="display: inline-flex; align-items: center; gap: 0.35rem; padding: 0.25rem 0.65rem; border-radius: 9999px; background: #ecfdf5; color: #047857; font-size: 0.75rem; font-weight: 600; border: 1px solid #a7f3d0;" title="Chỉ số GWP tuân thủ Phụ lục VIII Quy chế (EU) 2023/1773 (IPCC AR5 100-year)">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+            GWP: IPCC AR5
+          </span>
           <div class="user-profile" id="user-display">User</div>
         </div>
       </header>
@@ -614,7 +618,7 @@
 
               <div class="form-group" id="s3-local-proof-group">
                 <label>Lượng phát thải đã chịu giá carbon tại VN (tCO2e)</label>
-                <input type="number" id="s3-local-covered-emissions" class="form-control" placeholder="Mặc định: Toàn bộ phát thải lô hàng" oninput="calcStep3()">
+                <input type="number" id="s3-local-covered-emissions" class="form-control" placeholder="Nhập lượng phát thải thực tế có chứng từ (tCO2e)" oninput="calcStep3()">
                 <small style="color:#64748b;">Kèm chứng từ nộp thuế/hóa đơn hạn ngạch (bắt buộc khi kiểm toán EU thẩm tra).</small>
               </div>
 
@@ -2188,7 +2192,7 @@ function exportInternalReport() {
         // Use the same payload but send to a different endpoint
         const payload = buildPayload();
         
-        fetch('/api/generate-internal-report', {
+        fetch(getCbamApiUrl('/api/generate-internal-report'), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
@@ -2279,7 +2283,7 @@ function exportInternalReport() {
         
         const payload = buildPayload();
         
-        fetch('/api/generate-report', {
+        fetch(getCbamApiUrl('/api/generate-report'), {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(payload)
@@ -2589,7 +2593,16 @@ function exportInternalReport() {
         // Guard clause: Prevent Division by Zero (NaN / Infinity)
         if (isNaN(al) || al <= 0) {
             const resSeeTotal = document.getElementById('res-see-total');
+            const resSeeDir = document.getElementById('res-see-dir');
+            const resSeeIndir = document.getElementById('res-see-indir');
+            const resSeePrec = document.getElementById('res-see-prec');
+            const s3SeeTotal = document.getElementById('s3-see-total');
             if(resSeeTotal) resSeeTotal.innerText = '0.0000';
+            if(resSeeDir) resSeeDir.innerText = '0.0000';
+            if(resSeeIndir) resSeeIndir.innerText = '0.0000';
+            if(resSeePrec) resSeePrec.innerText = '0.0000';
+            if(s3SeeTotal) s3SeeTotal.value = '0.0000';
+            if(typeof calcStep3 === 'function') calcStep3();
             return;
         }
         
@@ -2751,14 +2764,24 @@ function exportInternalReport() {
         }
         
         // SEFA_adj calculation (Free allocation phased out by CBAM factor)
-        const sefaAdj = (bm + sefaPrec) * (1 - cbamFactor);
+        const totalBm = bm + sefaPrec;
+        const sefaAdj = totalBm * (1 - cbamFactor);
         const sefaAdjInput = document.getElementById('s3-sefa-adj');
         if (sefaAdjInput) {
-            sefaAdjInput.value = sefaAdj.toFixed(4);
+            sefaAdjInput.value = totalBm > 0 ? sefaAdj.toFixed(4) : `0.0000 (Lộ trình ${(cbamFactor * 100).toFixed(1)}%)`;
         }
         
-        // Excess emissions per tonne
-        const excessSee = Math.max(0, seeTotal - sefaAdj);
+        // Excess emissions per tonne:
+        // Theo Điều 31 & Phụ lục IV Quy định (EU) 2023/956:
+        // - Trường hợp 1: Có Benchmark EU (totalBm > 0): Tính phát thải vượt hạn ngạch cấp miễn phí
+        // - Trường hợp 2: Không có Benchmark (totalBm == 0): Áp dụng trực tiếp tỷ lệ lộ trình CBAM (ví dụ 2.5% năm 2026)
+        let excessSee = 0;
+        if (totalBm > 0) {
+            excessSee = Math.max(0, seeTotal - sefaAdj);
+        } else {
+            excessSee = seeTotal * cbamFactor;
+        }
+
         // Total CBAM certificates needed
         const totalExcessEmissions = Math.ceil(excessSee * exportQty);
         
@@ -2825,7 +2848,7 @@ function exportInternalReport() {
             if (!cnCode) return;
             
             try {
-                const res = await fetch('/api/lookup-default', {
+                const res = await fetch(getCbamApiUrl('/api/lookup-default'), {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ cnCode: cnCode, country: country })
@@ -2947,7 +2970,6 @@ function exportInternalReport() {
         btn.innerHTML = '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display:inline-block; vertical-align:middle; margin-right:4px;"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>Tra he so Mac dinh EU';
         btn.disabled = false;
         if (typeof calcStep2 === 'function') calcStep2();
-    }
     }
 
 

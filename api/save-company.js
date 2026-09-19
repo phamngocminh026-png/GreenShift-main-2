@@ -8,13 +8,20 @@ export default async function handler(req, res) {
     });
   }
 
-  // Basic API security check
-  const authHeader = req.headers.authorization || req.headers['x-api-key'];
+  // Fail-closed API security check: GREENSHIFT_API_SECRET must be configured
   const expectedSecret = process.env.GREENSHIFT_API_SECRET;
-  if (expectedSecret && authHeader !== `Bearer ${expectedSecret}` && authHeader !== expectedSecret) {
+  if (!expectedSecret) {
+    return res.status(500).json({
+      success: false,
+      message: 'Lỗi cấu hình hệ thống: Biến môi trường GREENSHIFT_API_SECRET chưa được thiết lập trên máy chủ'
+    });
+  }
+
+  const authHeader = req.headers.authorization || req.headers['x-api-key'];
+  if (!authHeader || (authHeader !== `Bearer ${expectedSecret}` && authHeader !== expectedSecret)) {
     return res.status(401).json({
       success: false,
-      message: 'Unauthorized: Invalid authentication credentials'
+      message: 'Unauthorized: Thiếu hoặc sai thông tin xác thực (Bearer API Secret)'
     });
   }
 

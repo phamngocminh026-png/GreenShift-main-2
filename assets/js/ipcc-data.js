@@ -1,3 +1,23 @@
+/**
+ * GREENSHIFT IPCC GLOBAL WARMING POTENTIAL (GWP) DATABASE
+ * --------------------------------------------------------
+ * Quy định phạm vi áp dụng phiên bản Báo cáo Đánh giá IPCC (AR):
+ * 1. Báo cáo EU CBAM: Bắt buộc áp dụng IPCC AR5 (100-year GWP) theo Phụ lục VIII
+ *    Quy chế Thực thi (EU) 2023/1773 của Ủy ban Châu Âu.
+ * 2. Kiểm kê KNK Quốc gia / Doanh nghiệp Việt Nam: Áp dụng IPCC AR4 / AR5 theo
+ *    Quyết định 2626/QĐ-BTNMT & Thông tư 01/2022/TT-BTNMT (Bộ Tài nguyên & Môi trường).
+ * 3. Phiên bản IPCC AR6: Dùng cho phân tích kịch bản tương lai và đối chiếu khoa học.
+ */
+const IPCC_STANDARD_CONFIG = {
+  cbamDefaultVersion: 'AR5-100',
+  domesticDefaultVersion: 'AR4-100',
+  scientificVersion: 'AR6-100',
+  legalBasis: {
+    cbam: 'EU CBAM Implementing Regulation (EU) 2023/1773 Annex VIII',
+    domestic: 'QD 2626/QD-BTNMT & TT 01/2022/TT-BTNMT'
+  }
+};
+
 const IPCC_DB = {
   "AR4-100": {
     "1,1,1-Trichloroethane": 146.0,

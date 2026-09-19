@@ -1,0 +1,5 @@
+{
+  "name": "greenshift-serverless-api",
+  "private": true,
+  "type": "module"
+}

@@ -71,6 +71,7 @@ const WordExport = {
 
     let sumGHG = 0;
     let sumSquares = 0;
+    let sumBiogenic_tco2 = 0;
 
     let ch4Gwp = 28;
     let n2oGwp = 265;
@@ -132,8 +133,20 @@ const WordExport = {
           catLower === 'điện mua vào' || catLower === 'tiêu thụ điện'
       ) && !nameLower.includes('máy phát điện') && !nameLower.includes('dầu do') && energyType !== 'DIESEL';
 
-      // 5. Phân loại Nguồn đốt di động (Scope 1 Mobile)
-      const isMobile = !isWastewater && !isRefrigerant && !isPccc && !isElectricity && (
+      // 5. Phân loại Quá trình công nghiệp (Scope 1 IPPU)
+      const isProcess = !isWastewater && !isRefrigerant && !isPccc && !isElectricity && (
+          act.isProcessEmission === 'true' || 
+          typeLower.includes('quá trình công nghiệp') || 
+          catLower.includes('công nghiệp') || 
+          typeLower.includes('thổi oxy') || 
+          typeLower.includes('lò hồ quang điện trong luyện thép') || 
+          typeLower.includes('luyện thép') ||
+          nameLower.includes('ippu') || 
+          nameLower.includes('quá trình luyện thép')
+      );
+
+      // 6. Phân loại Nguồn đốt di động (Scope 1 Mobile)
+      const isMobile = !isWastewater && !isRefrigerant && !isPccc && !isElectricity && !isProcess && (
           typeLower === 'đốt cháy động' || groupLower === 'nguồn đốt di động' ||
           nameLower.includes('xe nâng') || nameLower.includes('xe tải') ||
           nameLower.includes('ô tô') || nameLower.includes('phương tiện')
@@ -279,6 +292,49 @@ const WordExport = {
           tbl318Map.set(k318, { name: name, gas: 'CO2', u_val: '5,00%', ref: 'QD 2626/QD-BTNMT' });
         }
         const uSource = Math.sqrt(Math.pow(0.02, 2) + Math.pow(0.05, 2));
+      } else if (isProcess) {
+        // Scope 1: Quá trình công nghiệp (IPPU - Luyện thép / Hóa chất)
+        const rawEf = act.finalFactor ? parseFloat(act.finalFactor) : 60;
+        const ef_process = rawEf;
+        const calc_tco2e = parseFloat(act.co2e) ? (parseFloat(act.co2e) / 1000) : ((amount * ef_process) / 1000);
+        const t_co2e = calc_tco2e;
+        const processFuel = 'Quá trình công nghệ (IPPU)';
+        const targetUnit = act.unit || 'tấn';
+        const key = `${name}:::${processFuel}:::${targetUnit}`;
+
+        if (!stationaryMap.has(key)) {
+          stationaryMap.set(key, {
+            name: name,
+            fuel: processFuel,
+            unit: targetUnit,
+            amount_sum: 0,
+            density: 1,
+            consumption_gg_sum: 0,
+            ncv: 0,
+            tj_sum: 0,
+            ef_co2: ef_process,
+            t_co2_sum: 0,
+            ef_ch4: 0,
+            t_ch4_sum: 0,
+            ef_n2o: 0,
+            t_n2o_sum: 0,
+            t_co2e_sum: 0
+          });
+        }
+        const item = stationaryMap.get(key);
+        item.amount_sum += amount;
+        item.t_co2_sum += t_co2e;
+        item.t_co2e_sum += t_co2e;
+
+        const k317 = `2.C.1:::${name}:::CO2`;
+        if (!tbl317Map.has(k317)) {
+          tbl317Map.set(k317, { name: name, gas: 'CO2', u_val: '5,00%', ref: 'IPCC 2006, Tap 3, Chuong 4 (Luyen thep)' });
+        }
+        const k318 = `2.C.1:::${name}:::CO2`;
+        if (!tbl318Map.has(k318)) {
+          tbl318Map.set(k318, { name: name, gas: 'CO2', u_val: '5,00%', ref: 'QD 2626/QD-BTNMT' });
+        }
+        const uSource = Math.sqrt(Math.pow(0.05, 2) + Math.pow(0.05, 2));
         sumSquares += Math.pow(uSource * t_co2e, 2);
         sumGHG += t_co2e;
 
@@ -296,11 +352,16 @@ const WordExport = {
         const ef_ch4_tj = fuelDef.ef_ch4_tj;
         const ef_n2o_tj = fuelDef.ef_n2o_tj;
 
+        let bioCo2 = 0;
+        if (isBiomass) {
+          bioCo2 = parseFloat(act.biogenicCo2) ? (parseFloat(act.biogenicCo2) / 1000) : (parseFloat(act.co2e) ? parseFloat(act.co2e) / 1000 : ((tj * ef_co2_tj) / 1000));
+          sumBiogenic_tco2 += bioCo2;
+        }
         const t_co2 = isBiomass ? 0 : ((tj * ef_co2_tj) / 1000);
         const t_ch4 = (tj * ef_ch4_tj) / 1000;
         const t_n2o = (tj * ef_n2o_tj) / 1000;
         const calc_tco2e = t_co2 + (t_ch4 * ch4Gwp) + (t_n2o * n2oGwp);
-        const t_co2e = parseFloat(act.co2e) ? parseFloat(act.co2e) / 1000 : calc_tco2e;
+        const t_co2e = isBiomass ? ((t_ch4 * ch4Gwp) + (t_n2o * n2oGwp)) : (parseFloat(act.co2e) ? parseFloat(act.co2e) / 1000 : calc_tco2e);
 
         const fuelLabel = fuelDef.name + (isBiomass ? " (Sinh học / Biomass)" : "");
         const displayName = cleanDisplayName(name, fuelDef.name);
@@ -571,6 +632,8 @@ const WordExport = {
       total_n2o: sumS1_n2o.toFixed(5).replace('.', ','),
       total_n2o_co2e: (sumS1_n2o * 273).toFixed(2).replace('.', ','),
       total_hfc_co2e: Array.from(fugitiveMap.values()).reduce((s, r) => s + r.t_co2e_sum, 0).toFixed(2).replace('.', ','),
+      biogenic_total: sumBiogenic_tco2.toFixed(2).replace('.', ','),
+      scope1_biogenic: sumBiogenic_tco2.toFixed(2).replace('.', ','),
       total_emissions: sumTotal_tco2e.toFixed(2).replace('.', ',')
     };
   },
@@ -602,15 +665,24 @@ const WordExport = {
       } else if (typeof window !== 'undefined' && window.__exportActivitiesOverride) {
         activities = window.__exportActivitiesOverride;
       } else if (typeof localStorage !== 'undefined') {
-        const userStr = localStorage.getItem('gs_current_user') || 'guest';
+        const userStr = (localStorage.getItem('gs_current_user') || 'guest').trim();
+        const userSlug = userStr.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '') || 'guest';
         const branchSelect = (typeof document !== 'undefined') ? document.getElementById('branch-selector') : null;
         if (branchSelect) {
-          const branchName = branchSelect.value;
-          const branchKey = branchName.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
-          const storageKey = `gs_data_${userStr}_${branchKey}_activity`;
-          activities = JSON.parse(localStorage.getItem(storageKey)) || [];
+          const branchName = branchSelect.value || 'main';
+          const branchKey = branchName.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '') || 'main';
+          const storageKey = `gs_data_${userSlug}_${branchKey}_activity`;
+          const rawKey = `gs_data_${userStr}_${branchKey}_activity`;
+          activities = JSON.parse(localStorage.getItem(storageKey) || localStorage.getItem(rawKey) || '[]');
+          if (activities.length === 0) {
+            const candKeys = [`gs_data_${userSlug}_tru_so_chinh_activity`, `gs_data_${userStr}_tru_so_chinh_activity`, `gs_data_guest_tru_so_chinh_activity`];
+            for (const ck of candKeys) {
+              const cand = JSON.parse(localStorage.getItem(ck) || '[]');
+              if (cand.length > 0) { activities = cand; break; }
+            }
+          }
         } else {
-          activities = JSON.parse(localStorage.getItem('gs_v2_activity_main')) || [];
+          activities = JSON.parse(localStorage.getItem(`gs_data_${userSlug}_tru_so_chinh_activity`) || localStorage.getItem('gs_v2_activity_main') || '[]');
         }
         if (activities.length === 0) {
           const old = JSON.parse(localStorage.getItem('gs_v2_activity_main')) || [];
@@ -646,7 +718,8 @@ const WordExport = {
         total_emissions: grouped.total_emissions,
         scope1_total: grouped.scope1_total,
         scope2_total: grouped.scope2_total,
-        biogenic_total: calcResults && calcResults.biogenic ? calcResults.biogenic.toFixed(2).replace('.', ',') : "0,00",
+        biogenic_total: (grouped.biogenic_total && grouped.biogenic_total !== "0,00") ? grouped.biogenic_total : (calcResults && calcResults.biogenic ? calcResults.biogenic.toFixed(2).replace('.', ',') : "0,00"),
+        scope1_biogenic: (grouped.scope1_biogenic && grouped.scope1_biogenic !== "0,00") ? grouped.scope1_biogenic : "0,00",
         
         scope1_co2: grouped.scope1_co2,
         scope1_ch4: grouped.scope1_ch4,

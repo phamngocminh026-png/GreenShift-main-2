@@ -183,11 +183,12 @@
         u_ef_co2: 5.0, u_ef_ch4: 150, u_ef_n2o: 150,
         id: 'biomass_wood',
         name: 'Củi / Dăm gỗ / Mùn cưa',
-        factor: 0.038,
+        factor: 0.1356, // Scope 1 non-CO2 = (ef_ch4*GWP_CH4 + ef_n2o*GWP_N2O)*ncv/10^6 = (300*25 + 4*298)*15.6/10^6 = 0.1356 kgCO2e/kg (AR4)
+        factor_ar5: 0.1476, // Scope 1 non-CO2 theo AR5: (300*28 + 4*265)*15.6/10^6 = 0.1476 kgCO2e/kg
         biogenic_factor: 1.7472, // kg CO2 sinh học / kg (1.7472 tCO2/tấn theo IPCC 2006 Table 2.2)
         unit: 'kgCO2e/kg',
         ncv: 15.6,
-        isBiogenic: true, // CO2 sinh học tính riêng
+        isBiogenic: true, // CO2 sinh học tách riêng ngoài Scope 1
         ef_co2_tj: 112000,
         ef_ch4_tj: 300.0,
         ef_n2o_tj: 4.0
@@ -195,7 +196,8 @@
       biomass_pellet: {
         id: 'biomass_pellet',
         name: 'Viên nén gỗ / Mùn cưa ép',
-        factor: 0.035,
+        factor: 0.1521, // Scope 1 non-CO2 = (ef_ch4*GWP_CH4 + ef_n2o*GWP_N2O)*ncv/10^6 = (300*25 + 4*298)*17.5/10^6 = 0.1521 kgCO2e/kg (AR4)
+        factor_ar5: 0.1656, // Scope 1 non-CO2 theo AR5: (300*28 + 4*265)*17.5/10^6 = 0.1656 kgCO2e/kg
         biogenic_factor: 1.9600, // kg CO2 sinh học / kg (1.960 tCO2/tấn theo IPCC 2006 Table 2.2)
         unit: 'kgCO2e/kg',
         ncv: 17.5,
@@ -207,7 +209,8 @@
       charcoal: {
         id: 'charcoal',
         name: 'Than củi',
-        factor: 0.335,
+        factor: 0.1563, // Scope 1 non-CO2 = (200*25 + 1*298)*29.5/10^6 = 0.1563 kgCO2e/kg (AR4)
+        factor_ar5: 0.1730, // Scope 1 non-CO2 theo AR5: (200*28 + 1*265)*29.5/10^6 = 0.1730 kgCO2e/kg
         biogenic_factor: 3.3040, // kg CO2 sinh học / kg (3.304 tCO2/tấn theo IPCC 2006 Table 2.2)
         unit: 'kgCO2e/kg',
         ncv: 29.5,
@@ -219,10 +222,14 @@
       biogas: {
         id: 'biogas',
         name: 'Khí sinh học (Biogas)',
-        factor: 0.058,
+        factor: 0.058, // kgCO2e/m3 rò rỉ khí CH4 không cháy hoàn toàn theo IPCC 2006 Vol.2
+        biogenic_factor: 1.0920, // kg CO2 sinh học / m3 (54600 kgCO2/TJ * 0.020 TJ/1000m3)
         unit: 'kgCO2e/m3',
         ncv: 20.0,
-        isBiogenic: true
+        isBiogenic: true,
+        ef_co2_tj: 54600,
+        ef_ch4_tj: 1.0,
+        ef_n2o_tj: 0.1
       }
     },
 

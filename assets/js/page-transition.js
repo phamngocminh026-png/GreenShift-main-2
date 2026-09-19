@@ -1,4 +1,4 @@
-﻿/**
+/**
  * GreenShift Page Transition Engine
  * Smooth page entrance, exit animations, and top glowing progress bar.
  */
@@ -48,6 +48,9 @@
 
   // Intercept internal link clicks for smooth exit animation
   document.addEventListener('click', function (e) {
+    // When running under file:// protocol, preserve native browser navigation to prevent freezing
+    if (window.location.protocol === 'file:') return;
+
     const link = e.target.closest('a');
     if (!link) return;
 

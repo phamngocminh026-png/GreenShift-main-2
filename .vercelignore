@@ -1,0 +1,35 @@
+# Vercel Deployment Ignore Rules
+# Exclude heavy documentation, tests, and temporary development files to keep serverless bundle < 20MB
+
+# Heavy reference documents (includes 84MB government regulation PDF)
+docs/
+
+# Testing suites & fixtures (not needed in production)
+tests/
+
+# Development scratch scripts & temporary artifacts
+scratch/
+scripts/
+
+# Audit reports & internal logs
+AUDIT_*.md
+*.log
+*.tmp
+*.temp
+*.bak
+
+# Windows launch scripts
+*.bat
+
+# Version control & editor configurations
+.git
+.github/
+.vscode/
+
+# Local cache & virtual environment
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.env.local
+.env.*.local

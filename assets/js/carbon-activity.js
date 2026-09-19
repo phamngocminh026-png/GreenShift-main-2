@@ -60,59 +60,37 @@
 
     function getDynamicTree() {
       const tree = {};
-      const sourceRows = document.querySelectorAll('#source-tbody tr:not(#no-source-row)');
-      if (sourceRows && sourceRows.length > 0) {
-        sourceRows.forEach(row => {
-          const scope = (row.cells[0]?.textContent || '').trim() || 'Phạm vi 1: Trực tiếp';
-          const category = row.dataset.category || (row.cells[1]?.textContent || '').trim();
-          const type = row.dataset.type || '';
-          if (!tree[scope]) tree[scope] = {};
-          if (!tree[scope][category]) tree[scope][category] = new Set();
-          if (type) tree[scope][category].add(type);
-        });
-      }
-
-      // Fallback: nếu DOM bảng nguồn chưa dựng (ví dụ Kế toán), đọc từ localStorage
-      if (Object.keys(tree).length === 0) {
+      let sourceRows = document.querySelectorAll('#source-tbody tr:not(#no-source-row)');
+      if (sourceRows.length === 0) {
         try {
-          const raw = localStorage.getItem(getBranchStorageKey('sources'));
-          const list = raw ? JSON.parse(raw) : [];
-          if (Array.isArray(list) && list.length > 0) {
-            list.forEach(src => {
-              const cat = src.category || 'Tiêu thụ điện';
-              const isElec = cat.includes('điện') || cat.includes('Điện');
-              const scope = isElec ? 'Phạm vi 2: Gián tiếp (Điện mua ngoài)' : 'Phạm vi 1: Trực tiếp';
-              const type = src.type || src.eq || cat;
+          const username = localStorage.getItem('gs_current_user') || 'guest';
+          const userSlug = username.trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '') || 'guest';
+          const branchEl = document.getElementById('branch-selector');
+          const branchName = (branchEl && branchEl.value) ? branchEl.value : 'main';
+          const branchKey = branchName.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
+          const stored = localStorage.getItem(`gs_data_${userSlug}_${branchKey}_sources`);
+          if (stored) {
+            const list = JSON.parse(stored);
+            list.forEach(item => {
+              const scope = (typeof getScopeInfo === 'function') ? getScopeInfo(item.category, item.ef, item.type).label : (item.scope || 'Loại 1');
+              const cat = item.category || 'Khác';
+              const type = item.type || item.name || '';
               if (!tree[scope]) tree[scope] = {};
               if (!tree[scope][cat]) tree[scope][cat] = new Set();
               if (type) tree[scope][cat].add(type);
             });
+            return tree;
           }
         } catch(e) {}
       }
-
-      // Luôn tích hợp các nguồn năng lượng & chi phí chuẩn cấp cơ sở cho Kế toán
-      const defaultFacilityTree = {
-        'Phạm vi 1: Trực tiếp': {
-          'Đốt cháy cố định': ['Dầu Diesel (DO)', 'Dầu nặng (FO)', 'Khí LPG', 'Than đá', 'Nhiên liệu sinh khối'],
-          'Đốt cháy động': ['Xăng RON 95 / E5', 'Dầu Diesel (DO) xe nâng'],
-          'Các quá trình công nghiệp': ['Lò thổi oxy hoặc lò hồ quang điện trong luyện thép', 'Sản xuất vôi, xi măng'],
-          'Phát thải thất thoát': ['Môi chất lạnh R-410A / R-32', 'Khí chữa cháy CO2'],
-          'Xử lý nước thải': ['Hệ thống bể tự hoại & nước thải']
-        },
-        'Phạm vi 2: Gián tiếp (Điện mua ngoài)': {
-          'Tiêu thụ điện': ['Điện lưới Việt Nam EVN', 'Điện nhận từ trạm biến áp']
-        }
-      };
-
-      Object.entries(defaultFacilityTree).forEach(([scp, cats]) => {
-        if (!tree[scp]) tree[scp] = {};
-        Object.entries(cats).forEach(([ct, types]) => {
-          if (!tree[scp][ct]) tree[scp][ct] = new Set();
-          types.forEach(t => tree[scp][ct].add(t));
-        });
+      sourceRows.forEach(row => {
+        const scope = (row.cells[0]?.textContent || '').trim();
+        const category = row.dataset.category || (row.cells[1]?.textContent || '').trim();
+        const type = row.dataset.type || '';
+        if (!tree[scope]) tree[scope] = {};
+        if (!tree[scope][category]) tree[scope][category] = new Set();
+        if (type) tree[scope][category].add(type);
       });
-
       return tree;
     }
 
@@ -120,28 +98,24 @@
       actCol1.innerHTML = '';
       actCol2.innerHTML = '';
       actCol3.innerHTML = '';
+      
+      const tree = getDynamicTree();
+      const scopes = Object.keys(tree);
+      if (scopes.length === 0) {
+        actCol1.innerHTML = '<div style="padding:1rem;color:#888;">Chưa có Nguồn phát thải nào</div>';
+        return;
+      }
 
-      // Muc -- Tat ca Nguon -- luon luon o vi tri dau tien de nguoi dung luon xoa loc duoc
       const clearDiv = document.createElement('div');
-      clearDiv.className = 'dropdown-item active';
+      clearDiv.className = 'dropdown-item';
       clearDiv.innerHTML = '<span>-- Tất cả Nguồn --</span>';
       clearDiv.onclick = () => {
-        actFilterInput.innerText = '-- Tất cả Nguồn --';
+        actFilterInput.innerText = '-- Tất cả Nguồn phát thải --';
         actHiddenFilter.value = '';
         actFilterDropdown.classList.remove('open');
         applyFilter('');
       };
       actCol1.appendChild(clearDiv);
-      
-      const tree = getDynamicTree();
-      const scopes = Object.keys(tree);
-      if (scopes.length === 0) {
-        const emptyHint = document.createElement('div');
-        emptyHint.style.cssText = 'padding:0.75rem;color:#94a3b8;font-size:0.78rem;';
-        emptyHint.innerText = 'Chưa có cấu hình nguồn riêng';
-        actCol1.appendChild(emptyHint);
-        return;
-      }
 
       scopes.forEach(scope => {
         const div = document.createElement('div');
@@ -245,10 +219,12 @@
       const noRow = document.getElementById('no-activity-row');
       if (noRow) {
         noRow.style.display = (visibleCount === 0) ? '' : 'none';
-        if (visibleCount === 0 && rows.length > 0) {
-          noRow.cells[0].innerText = 'Không có bản ghi nào khớp với bộ lọc đã chọn';
-        } else if (rows.length === 0) {
-          noRow.cells[0].innerText = 'Chưa có dữ liệu';
+        if (noRow.cells && noRow.cells[0]) {
+          if (visibleCount === 0 && rows.length > 0) {
+            noRow.cells[0].innerText = 'Không có bản ghi nào khớp với bộ lọc đã chọn';
+          } else if (rows.length === 0) {
+            noRow.cells[0].innerText = 'Chưa có dữ liệu';
+          }
         }
       }
     }
@@ -355,18 +331,8 @@
       const userSlug = rawUser.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '') || 'guest';
       const branchEl = document.getElementById('branch-selector');
       const branchName = (branchEl && branchEl.value) ? branchEl.value : 'main';
-      const branchKey = branchName.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '') || 'main';
-
-      const rawKey = `gs_data_${rawUser}_${branchKey}_${suffix}`;
-      const slugKey = `gs_data_${userSlug}_${branchKey}_${suffix}`;
-
-      if (typeof localStorage !== 'undefined') {
-        const rawVal = localStorage.getItem(rawKey);
-        if (rawVal && rawVal !== '[]' && rawVal !== '{}') return rawKey;
-        const slugVal = localStorage.getItem(slugKey);
-        if (slugVal && slugVal !== '[]' && slugVal !== '{}') return slugKey;
-      }
-      return rawKey;
+      const branchKey = branchName.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
+      return `gs_data_${userSlug}_${branchKey}_${suffix}`;
     }
 
     function saveActivityList() {
@@ -375,17 +341,7 @@
       rows.forEach(row => {
         data.push({ ...row.dataset });
       });
-      const jsonStr = JSON.stringify(data);
-      localStorage.setItem(getBranchStorageKey('activity'), jsonStr);
-      const rawUser = (localStorage.getItem('gs_current_user') || 'guest').trim();
-      const userSlug = rawUser.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '') || 'guest';
-      const branchEl = document.getElementById('branch-selector');
-      const branchName = (branchEl && branchEl.value) ? branchEl.value : 'main';
-      const branchKey = branchName.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '') || 'main';
-      localStorage.setItem(`gs_data_${rawUser}_${branchKey}_activity`, jsonStr);
-      if (rawUser !== userSlug) {
-        localStorage.setItem(`gs_data_${userSlug}_${branchKey}_activity`, jsonStr);
-      }
+      localStorage.setItem(getBranchStorageKey('activity'), JSON.stringify(data));
 
       if (typeof renderMachineOverview === 'function') renderMachineOverview();
       if (typeof renderReconciliationSummary === 'function') renderReconciliationSummary();
@@ -398,15 +354,11 @@
 
       // Auto-sync to Supabase in background (non-blocking)
       try {
-        if (window.GreenShiftDB) {
-          if (typeof window.GreenShiftDB.triggerAutoSync === 'function') {
-            window.GreenShiftDB.triggerAutoSync(1000);
-          } else if (typeof window.GreenShiftDB.pushActivities === 'function') {
-            const branchEl = document.getElementById('branch-selector');
-            const bName = (branchEl && branchEl.value) ? branchEl.value : 'main';
-            const bKey = bName.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
-            window.GreenShiftDB.pushActivities(bKey, data);
-          }
+        if (window.GreenShiftDB && typeof window.GreenShiftDB.pushActivities === 'function') {
+          const branchEl = document.getElementById('branch-selector');
+          const bName = (branchEl && branchEl.value) ? branchEl.value : 'main';
+          const bKey = bName.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
+          window.GreenShiftDB.pushActivities(bKey, data);
         }
       } catch (syncErr) {
         console.warn('[GreenShift DB Sync] Ignored background sync exception:', syncErr);
@@ -415,19 +367,7 @@
 
     function loadActivityList() {
       tbody.innerHTML = '<tr id="no-activity-row"><td colspan="11" style="text-align: center; color: var(--color-text-secondary); padding: 3rem;">Chưa có dữ liệu</td></tr>';
-      const rawUser = (localStorage.getItem('gs_current_user') || 'guest').trim();
-      const userSlug = rawUser.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '') || 'guest';
-      const branchEl = document.getElementById('branch-selector');
-      const branchName = (branchEl && branchEl.value) ? branchEl.value : 'main';
-      const branchKey = branchName.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '') || 'main';
-
-      let stored = localStorage.getItem(`gs_data_${rawUser}_${branchKey}_activity`) ||
-                   localStorage.getItem(`gs_data_${userSlug}_${branchKey}_activity`) ||
-                   localStorage.getItem(`gs_data_${rawUser}_tru_so_chinh_activity`) ||
-                   localStorage.getItem(`gs_data_${userSlug}_tru_so_chinh_activity`) ||
-                   localStorage.getItem(getBranchStorageKey('activity'));
-
-      // Clean activity load without cross-user leak
+      const stored = localStorage.getItem(getBranchStorageKey('activity'));
       if (!stored) return;
       try {
         let data = JSON.parse(stored);
@@ -595,7 +535,8 @@
         const facGroup = document.createElement('optgroup');
         facGroup.label = 'Hạng mục Năng lượng / Nhiên liệu mua ngoài (Cấp cơ sở)';
         let facMatched = 0;
-        const addFacOption = (src) => {
+        facSources.forEach(src => {
+          if (filterType && src.type !== filterType && !(filterType.includes('Đốt cháy') && src.type.includes('Đốt cháy'))) return;
           const opt = document.createElement('option');
           opt.value = src.id;
           opt.text = src.name;
@@ -611,23 +552,31 @@
           opt.dataset.biomass = src.biomass || '';
           facGroup.appendChild(opt);
           facMatched++;
-        };
-
-        facSources.forEach(src => {
-          if (filterType && src.type !== filterType && !(filterType.includes('Đốt cháy') && src.type.includes('Đốt cháy')) && !src.name.toLowerCase().includes(filterType.toLowerCase())) return;
-          addFacOption(src);
         });
-
-        if (facMatched === 0) {
-          facSources.forEach(src => addFacOption(src));
-        }
-
         if (facMatched > 0) {
           sourceSelect.appendChild(facGroup);
         }
       }
       
       let sourceRows = document.querySelectorAll('#source-tbody tr:not(#no-source-row)');
+      let rowsList = [];
+      if (sourceRows.length > 0) {
+        sourceRows.forEach(r => rowsList.push(r));
+      } else {
+        try {
+          const username = localStorage.getItem('gs_current_user') || 'guest';
+          const branchEl = document.getElementById('branch-selector');
+          const branchName = (branchEl && branchEl.value) ? branchEl.value : 'main';
+          const branchKey = branchName.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
+          const stored = localStorage.getItem(`gs_data_${username}_${branchKey}_sources`);
+          if (stored) {
+            const list = JSON.parse(stored);
+            list.forEach(item => {
+              rowsList.push({ dataset: { ...item } });
+            });
+          }
+        } catch(e) {}
+      }
       const eqGroup = (curUserRole === 'accountant' && !isProductionOnly) 
         ? document.createElement('optgroup') 
         : null;
@@ -638,32 +587,7 @@
       let needsSave = false;
       let matchedCount = 0;
 
-      // Neu DOM chua co row nao, doc truc tiep tu localStorage
-      if ((!sourceRows || sourceRows.length === 0) && typeof localStorage !== 'undefined') {
-        try {
-          const raw = localStorage.getItem(getBranchStorageKey('sources'));
-          const list = raw ? JSON.parse(raw) : [];
-          if (Array.isArray(list) && list.length > 0) {
-            list.forEach(src => {
-              const opt = document.createElement('option');
-              opt.value = src.id || ('src_' + Math.random().toString(36).substr(2, 7));
-              opt.text = src.name || `${src.category} - ${src.eq || src.type}`;
-              opt.dataset.ef = src.ef || '';
-              opt.dataset.refrigerant = src.refrigerant || '';
-              opt.dataset.efFactor = src.efFactor || '0.6766';
-              opt.dataset.efUnit = src.efUnit || '';
-              opt.dataset.type = src.type || src.category || '';
-              opt.dataset.eq = src.eq || src.name || '';
-              opt.dataset.measure = src.measure || '';
-              opt.dataset.unit = src.productionUnit || src.opCapUnit || 'kWh';
-              parentContainer.appendChild(opt);
-              matchedCount++;
-            });
-          }
-        } catch(e) {}
-      }
-
-      sourceRows.forEach(row => {
+      rowsList.forEach(row => {
         let id = row.dataset.id;
         if (!id) {
             id = 'src_' + Math.random().toString(36).substr(2, 9);
@@ -1007,7 +931,11 @@
           eqSpecCard.style.display = 'none';
         } else {
           try {
-            const storageKey = getBranchStorageKey('equipment');
+            const curUser = (localStorage.getItem('gs_current_user') || '').toLowerCase();
+            const branchEl = document.getElementById('branch-selector');
+            const branchName = (branchEl && branchEl.value) ? branchEl.value : 'main';
+            const branchKey = branchName.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
+            const storageKey = `gs_data_${curUser}_${branchKey}_equipment`;
             const eqList = JSON.parse(localStorage.getItem(storageKey) || '[]');
             
             const matched = eqList.find(eq => eq.name === selected.text || (selected.text && selected.text.includes(eq.name)));
@@ -1484,7 +1412,7 @@
         switchActivityInputMode('direct');
         if (panelHours) panelHours.style.display = 'none';
         if (panelMeter) panelMeter.style.display = 'none';
-        if (panelDirect) panelDirect.style.display = 'block';
+        if (panelDirect) panelDirect.style.display = 'none';
         populateSourceDropdowns(currentFilter, false);
       } else {
         modalTitle.innerText = currentFilter ? `Thêm ${currentFilter}` : `Thêm Dữ liệu hoạt động`;
@@ -2607,7 +2535,7 @@
       const sourceRows = document.querySelectorAll('#source-tbody tr:not(#no-source-row)');
       const machineSources = [];
       sourceRows.forEach(row => {
-        const measure = row.dataset.measure || row.dataset.measurementMethod || '';
+        const measure = row.dataset.measure || '';
         const opCap = parseFloat(row.dataset.opCapacity || row.dataset.capacity) || 0;
         const eqName = row.dataset.eq || row.dataset.type || '';
         const isProc = row.dataset.isProcessEmission === 'true' || 
@@ -2615,8 +2543,8 @@
                        Boolean(row.dataset.productionUnit) ||
                        (row.dataset.category && row.dataset.category.includes('công nghiệp'));
 
-        if (measure.includes('Tự đánh giá') || measure.includes('liên tục') || measure.includes('Đo') || opCap > 0 || isProc) {
-          const loadVal = parseFloat(row.dataset.opLoad || row.dataset.load) || (isProc ? 100 : 80);
+        if (measure === 'Tự đánh giá' || measure.includes('liên tục') || measure === 'Đo liên tục' || opCap > 0 || isProc) {
+          const loadVal = parseFloat(row.dataset.opLoad) || (isProc ? 100 : 80);
           const hRate = parseFloat(row.dataset.hourlyRate) || (opCap > 0 ? Math.round(opCap * (loadVal / 100) * 1000) / 1000 : 0);
           machineSources.push({
             id: row.dataset.id,
@@ -2627,11 +2555,11 @@
             isProc: isProc,
             productionUnit: row.dataset.productionUnit || 'tấn',
             capacity: opCap,
-            capUnit: isProc ? (row.dataset.productionUnit || 'tấn') : (row.dataset.opCapUnit || row.dataset.capUnit || 'kW'),
+            capUnit: isProc ? (row.dataset.productionUnit || 'tấn') : (row.dataset.opCapUnit || 'kW'),
             load: isProc ? 100 : loadVal,
             hourlyRate: hRate,
-            hoursDay: parseFloat(row.dataset.opHoursDay || row.dataset.hoursDay) || (isProc ? 8 : 16),
-            daysWeek: parseFloat(row.dataset.opDaysWeek || row.dataset.daysWeek) || 6,
+            hoursDay: parseFloat(row.dataset.opHoursDay) || (isProc ? 8 : 16),
+            daysWeek: parseFloat(row.dataset.opDaysWeek) || 6,
             annualEstQty: parseFloat(row.dataset.annualEstQty) || 0,
             efFactor: parseFloat(row.dataset.efFactor) || (isProc ? 60 : 0.6766)
           });
@@ -2641,31 +2569,7 @@
       // Fallback nếu chưa tải lên DOM sourceRows
       if (machineSources.length === 0) {
         try {
-          const username = localStorage.getItem('gs_current_user') || 'guest';
-          const rawUser = username.trim();
-          const userSlug = rawUser.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '') || 'guest';
-          const branchEl = document.getElementById('branch-selector');
-          const branchName = (branchEl && branchEl.value) ? branchEl.value : 'main';
-          const branchKey = branchName.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
-          
-          let sources = JSON.parse(localStorage.getItem(`gs_data_${rawUser}_${branchKey}_sources`) || 
-                                   localStorage.getItem(`gs_data_${userSlug}_${branchKey}_sources`) || 
-                                   localStorage.getItem(getBranchStorageKey('sources')) || '[]');
-          if (!sources || sources.length === 0) {
-            const altKeys = [
-              `gs_data_${rawUser}_tru_so_chinh_sources`, 
-              `gs_data_${userSlug}_tru_so_chinh_sources`, 
-              `gs_data_${rawUser}_main_sources`, 
-              
-            ];
-            for (const ak of altKeys) {
-              const raw = localStorage.getItem(ak);
-              if (raw && raw !== '[]') {
-                try { sources = JSON.parse(raw); break; } catch(e) {}
-              }
-            }
-          }
-
+          const sources = JSON.parse(localStorage.getItem(getBranchStorageKey('sources')) || '[]');
           sources.forEach(src => {
             const measure = src.measure || src.measurementMethod || '';
             const opCap = parseFloat(src.opCapacity || src.capacity) || 0;
@@ -2673,7 +2577,7 @@
                            measure === 'Theo sản lượng sản phẩm' || 
                            Boolean(src.productionUnit) ||
                            (src.category && src.category.includes('công nghiệp'));
-            if (measure.includes('Tự đánh giá') || measure.includes('liên tục') || measure.includes('Đo') || opCap > 0 || isProc) {
+            if (measure === 'Tự đánh giá' || measure.includes('liên tục') || measure === 'Đo liên tục' || opCap > 0 || isProc) {
               const loadVal = parseFloat(src.opLoad || src.load) || (isProc ? 100 : 80);
               const hRate = parseFloat(src.hourlyRate) || (opCap > 0 ? Math.round(opCap * (loadVal / 100) * 1000) / 1000 : 0);
               machineSources.push({
@@ -3079,12 +2983,11 @@
       });
     }
 
-        // Hàm đặt lại dữ liệu kiểm thử (Hoạt động, Thiết bị, Nguồn) và giữ nguyên Tài khoản & Hồ sơ doanh nghiệp
+        // Hàm xóa sạch dữ liệu kiểm thử (Hoạt động, Thiết bị, Nguồn) và giữ nguyên Tài khoản & Hồ sơ doanh nghiệp
     window.resetGreenShiftTestData = function(skipConfirm) {
       if (!skipConfirm) {
         const confirmed = confirm(
-          "Bạn có chắc chắn muốn đặt lại bộ dữ liệu kiểm thử chuẩn (Nhà máy thép Hòa Bình 2026)?\n\n" +
-          "Hệ thống sẽ tái thiết lập toàn bộ Danh mục thiết bị, Nguồn phát thải và Dữ liệu hoạt động 12 tháng.\n" +
+          "Bạn có chắc chắn muốn xóa toàn bộ Dữ liệu hoạt động, Thiết bị và Nguồn phát thải đã nhập để kiểm thử lại từ đầu không?\n\n" +
           "(Tài khoản đăng nhập và Thông tin công ty vẫn được bảo lưu an toàn)."
         );
         if (!confirmed) return false;
@@ -3106,26 +3009,21 @@
 
       keysToRemove.forEach(k => localStorage.removeItem(k));
 
-      // Tái khởi tạo ngay lập tức bộ dữ liệu mẫu chuẩn Nhà máy thép Hòa Bình 2026
-      if (typeof window.seedSteelPlantSampleData === 'function') {
-        window.seedSteelPlantSampleData(true);
-      }
-
-      // Làm mới toàn bộ giao diện tức thì
-      if (typeof window.loadEquipmentList === 'function') window.loadEquipmentList();
-      if (typeof window.loadSourceList === 'function') window.loadSourceList();
-      if (typeof window.loadActivityList === 'function') window.loadActivityList();
-      if (typeof window.renderMachineOverview === 'function') window.renderMachineOverview();
-      if (typeof window.renderReconciliationSummary === 'function') window.renderReconciliationSummary();
-      if (typeof window.renderDashboard === 'function') window.renderDashboard();
-      if (typeof window.updateDashboard === 'function') window.updateDashboard();
-
-      if (!skipConfirm) {
-        const toast = document.createElement('div');
-        toast.textContent = 'Đã đặt lại thành công bộ dữ liệu kiểm thử chuẩn (Nhà máy thép Hòa Bình 2026)!';
-        toast.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#047857;color:#fff;padding:12px 24px;border-radius:8px;font-size:0.9rem;font-weight:600;z-index:99999;box-shadow:0 4px 16px rgba(0,0,0,0.2);max-width:90%;text-align:center;line-height:1.4;';
-        document.body.appendChild(toast);
-        setTimeout(() => toast.remove(), 4000);
+      if (skipConfirm) {
+        if (typeof window.seedSteelPlantSampleData === 'function') {
+          window.seedSteelPlantSampleData(true);
+        }
+        if (typeof window.loadActivityList === 'function') {
+          window.loadActivityList();
+        }
+        if (typeof window.renderMachineOverview === 'function') {
+          window.renderMachineOverview();
+        }
+      } else {
+        alert("Đã xóa toàn bộ dữ liệu hoạt động, thiết bị và nguồn phát thải. Hệ thống sẽ tải lại trang để bạn bắt đầu kiểm thử mới!");
+        if (typeof window !== 'undefined' && window.location && typeof window.location.reload === 'function') {
+          window.location.reload();
+        }
       }
       return true;
     };
@@ -3139,34 +3037,31 @@
       }
     });
 
-    // Tự động phân bổ chi tiết từng ngày trong tháng (Full 1..31 ngày) theo ca kíp thiết bị
+        // Tự động phân bổ chi tiết từng ngày trong tháng (Full 1..31 ngày) theo ca kíp thiết bị
+    // Tự động phân bổ chi tiết từng ngày (mặc định cho tất cả các tháng hoặc tháng chỉ định) theo ca kíp thiết bị
     function autoGenerateDailyOperationalRecords(year, monthVal = 'all', askConfirm = false) {
       const sourceRows = document.querySelectorAll('#source-tbody tr:not(#no-source-row)');
       let machineSources = [];
       sourceRows.forEach(r => {
         const d = r.dataset;
-        const measure = d.measure || d.measurementMethod || '';
+        const measure = d.measure || '';
         const isProcess = d.isProcessEmission === 'true' || (d.category && d.category.includes('công nghiệp'));
-        const opCap = parseFloat(d.opCapacity || d.capacity) || 0;
-        const opLoad = parseFloat(d.opLoad || d.load) || 80;
-        let hRate = parseFloat(d.hourlyRate) || (opCap > 0 ? Math.round(opCap * (opLoad / 100) * 1000) / 1000 : 0);
-
-        if (measure.includes('Tự đánh giá') || measure.includes('liên tục') || measure.includes('Đo') || opCap > 0 || isProcess) {
+        if (measure.includes('Tự đánh giá') || measure.includes('Đo liên tục') || d.opCapacity || d.hourlyRate || isProcess) {
           machineSources.push({
             id: d.id,
             name: d.eq || d.type,
             type: d.type || '',
             eq: d.eq || '',
-            measure: d.measure || measure,
+            measure: d.measure,
             isProcessEmission: isProcess ? 'true' : 'false',
             productionUnit: d.productionUnit || 'tấn',
             productName: d.productName || 'Sản phẩm',
-            opCapacity: opCap,
-            opCapUnit: d.opCapUnit || d.capUnit || '',
-            opLoad: opLoad,
-            opHoursDay: parseFloat(d.opHoursDay || d.hoursDay) || 8,
-            opDaysWeek: parseFloat(d.opDaysWeek || d.daysWeek) || 6,
-            hourlyRate: hRate,
+            opCapacity: parseFloat(d.opCapacity) || 0,
+            opCapUnit: d.opCapUnit || '',
+            opLoad: parseFloat(d.opLoad) || 80,
+            opHoursDay: parseFloat(d.opHoursDay) || 8,
+            opDaysWeek: parseFloat(d.opDaysWeek) || 6,
+            hourlyRate: parseFloat(d.hourlyRate) || 0,
             annualEstQty: parseFloat(d.annualEstQty) || 0,
             ef: d.ef || '',
             refrigerant: d.refrigerant || '',
@@ -3178,29 +3073,15 @@
 
       if (machineSources.length === 0) {
         try {
-          let sources = JSON.parse(localStorage.getItem(getBranchStorageKey('sources')) || '[]');
-          if (!sources || sources.length === 0) {
-            const rawUser = (localStorage.getItem('gs_current_user') || 'guest').trim();
-            const branchEl = document.getElementById('branch-selector');
-            const branchName = (branchEl && branchEl.value) ? branchEl.value : 'main';
-            const branchKey = branchName.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '') || 'main';
-            const altKeys = [`gs_data_${rawUser}_${branchKey}_sources`, `gs_data_${rawUser}_tru_so_chinh_sources`, `gs_data_${rawUser}_main_sources`, ];
-            for (const ak of altKeys) {
-              const raw = localStorage.getItem(ak);
-              if (raw && raw !== '[]') {
-                try { sources = JSON.parse(raw); break; } catch(e) {}
-              }
-            }
-          }
-
+          const username = localStorage.getItem('gs_current_user') || 'guest';
+          const branchEl = document.getElementById('branch-selector');
+          const branchName = (branchEl && branchEl.value) ? branchEl.value : 'main';
+          const branchKey = branchName.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
+          const sources = JSON.parse(localStorage.getItem(`gs_data_${username}_${branchKey}_sources`) || '[]');
           sources.forEach(d => {
             const measure = d.measure || d.measurementMethod || '';
             const isProcess = d.isProcessEmission === 'true' || (d.category && d.category.includes('công nghiệp'));
-            const opCap = parseFloat(d.opCapacity || d.capacity) || 0;
-            const opLoad = parseFloat(d.opLoad || d.load) || 80;
-            let hRate = parseFloat(d.hourlyRate) || (opCap > 0 ? Math.round(opCap * (opLoad / 100) * 1000) / 1000 : 0);
-
-            if (measure.includes('Tự đánh giá') || measure.includes('liên tục') || measure.includes('Đo') || opCap > 0 || isProcess) {
+            if (measure.includes('Tự đánh giá') || measure.includes('Đo liên tục') || d.opCapacity || d.hourlyRate || isProcess) {
               machineSources.push({
                 id: d.id,
                 name: d.eq || d.type,
@@ -3210,12 +3091,12 @@
                 isProcessEmission: isProcess ? 'true' : 'false',
                 productionUnit: d.productionUnit || 'tấn',
                 productName: d.productName || 'Sản phẩm',
-                opCapacity: opCap,
+                opCapacity: parseFloat(d.opCapacity || d.capacity) || 0,
                 opCapUnit: d.opCapUnit || d.capUnit || '',
-                opLoad: opLoad,
+                opLoad: parseFloat(d.opLoad || d.load) || 80,
                 opHoursDay: parseFloat(d.opHoursDay || d.hoursDay) || 8,
                 opDaysWeek: parseFloat(d.opDaysWeek || d.daysWeek) || 6,
-                hourlyRate: hRate,
+                hourlyRate: parseFloat(d.hourlyRate) || 0,
                 annualEstQty: parseFloat(d.annualEstQty) || 0,
                 ef: d.ef || '',
                 refrigerant: d.refrigerant || '',
@@ -3247,20 +3128,13 @@
       }
 
       const curYear = year || (document.getElementById('act-filter-year')?.value || new Date().getFullYear().toString());
-      const activityKey = getBranchStorageKey('activity');
+      const username = localStorage.getItem('gs_current_user') || 'guest';
+      const branchEl = document.getElementById('branch-selector');
+      const branchName = (branchEl && branchEl.value) ? branchEl.value : 'main';
+      const branchKey = branchName.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
+      const activityKey = `gs_data_${username}_${branchKey}_activity`;
 
       let activities = JSON.parse(localStorage.getItem(activityKey) || '[]');
-      if (!activities || activities.length === 0) {
-        const rawUser = (localStorage.getItem('gs_current_user') || 'guest').trim();
-        const branchEl = document.getElementById('branch-selector');
-        const branchName = (branchEl && branchEl.value) ? branchEl.value : 'main';
-        const branchKey = branchName.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '') || 'main';
-        const rawActKey = `gs_data_${rawUser}_${branchKey}_activity`;
-        const rawAlt = localStorage.getItem(rawActKey);
-        if (rawAlt && rawAlt !== '[]') {
-          try { activities = JSON.parse(rawAlt); } catch(e) {}
-        }
-      }
 
       if (askConfirm) {
         const confirmed = confirm(
@@ -3425,16 +3299,6 @@
       activities.sort((a, b) => (a.date || '').localeCompare(b.date || ''));
 
       localStorage.setItem(activityKey, JSON.stringify(activities));
-      try {
-        const rawUser = (localStorage.getItem('gs_current_user') || 'guest').trim();
-        const branchEl = document.getElementById('branch-selector');
-        const branchName = (branchEl && branchEl.value) ? branchEl.value : 'main';
-        const branchKey = branchName.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '') || 'main';
-        const rawActKey = `gs_data_${rawUser}_${branchKey}_activity`;
-        if (rawActKey !== activityKey) {
-          localStorage.setItem(rawActKey, JSON.stringify(activities));
-        }
-      } catch(e) {}
       loadActivityList();
       const viewDash = document.getElementById('view-dashboard');
       const isDashboardActive = viewDash && viewDash.style.display !== 'none';
@@ -3461,12 +3325,12 @@
 
     // --- ĐỒNG BỘ ĐỊNH MỨC HOẠT ĐỘNG KHI NGUỒN PHÁT THẢI ĐỔI SẢN LƯỢNG NĂM HOẶC THÔNG SỐ MÁY ---
     function syncSourceToBaselineActivities(src) {
-      const rawUser = (localStorage.getItem('gs_current_user') || 'guest').trim();
-      const userSlug = rawUser.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '') || 'guest';
+      if (!src) return;
+      const username = (localStorage.getItem('gs_current_user') || 'guest').toLowerCase();
       const branchEl = document.getElementById('branch-selector');
       const branchName = (branchEl && branchEl.value) ? branchEl.value : 'main';
-      const branchKey = branchName.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '') || 'main';
-      const storageKey = (typeof getBranchStorageKey === 'function') ? getBranchStorageKey('activity') : `gs_data_${userSlug}_${branchKey}_activity`;
+      const branchKey = branchName.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
+      const storageKey = `gs_data_${username}_${branchKey}_activity`;
       const actList = JSON.parse(localStorage.getItem(storageKey) || '[]');
       if (!actList || actList.length === 0) return;
 
@@ -3543,14 +3407,6 @@
 
       if (updatedCount > 0) {
         localStorage.setItem(storageKey, JSON.stringify(actList));
-        try {
-          const rawUser = (localStorage.getItem('gs_current_user') || 'guest').trim();
-          const branchEl = document.getElementById('branch-selector');
-          const branchName = (branchEl && branchEl.value) ? branchEl.value : 'main';
-          const branchKey = branchName.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '') || 'main';
-          const rawActKey = `gs_data_${rawUser}_${branchKey}_activity`;
-          if (rawActKey !== storageKey) localStorage.setItem(rawActKey, JSON.stringify(actList));
-        } catch(e) {}
         // Cập nhật trực tiếp lên DOM nếu bảng Dữ liệu hoạt động đang hiển thị
         const rows = document.querySelectorAll('#activity-tbody tr:not(#no-activity-row)');
         rows.forEach(tr => {
@@ -3628,19 +3484,12 @@
     }
 
     function removeActivityDaysOff(type) {
-      const activityKey = getBranchStorageKey('activity');
-      let activities = JSON.parse(localStorage.getItem(activityKey) || '[]');
-      if (!activities || activities.length === 0) {
-        const rawUser = (localStorage.getItem('gs_current_user') || 'guest').trim();
-        const branchEl = document.getElementById('branch-selector');
-        const branchName = (branchEl && branchEl.value) ? branchEl.value : 'main';
-        const branchKey = branchName.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '') || 'main';
-        const rawActKey = `gs_data_${rawUser}_${branchKey}_activity`;
-        const raw = localStorage.getItem(rawActKey);
-        if (raw && raw !== '[]') {
-          try { activities = JSON.parse(raw); } catch(e) {}
-        }
-      }
+      const username = localStorage.getItem('gs_current_user') || localStorage.getItem('gs_user') || 'guest';
+      const branchEl = document.getElementById('branch-selector');
+      const branchName = (branchEl && branchEl.value) ? branchEl.value : 'main';
+      const branchKey = branchName.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
+      const activityKey = `gs_data_${username}_${branchKey}_activity`;
+      const activities = JSON.parse(localStorage.getItem(activityKey) || '[]');
 
       const curYear = document.getElementById('act-filter-year')?.value || new Date().getFullYear().toString();
       const curMonth = document.getElementById('act-filter-month')?.value || '';
@@ -3745,14 +3594,6 @@
       if (!confirm(confirmMsg)) return;
 
       localStorage.setItem(activityKey, JSON.stringify(remaining));
-      try {
-        const rawUser = (localStorage.getItem('gs_current_user') || 'guest').trim();
-        const branchEl = document.getElementById('branch-selector');
-        const branchName = (branchEl && branchEl.value) ? branchEl.value : 'main';
-        const branchKey = branchName.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '') || 'main';
-        const rawActKey = `gs_data_${rawUser}_${branchKey}_activity`;
-        if (rawActKey !== activityKey) localStorage.setItem(rawActKey, JSON.stringify(remaining));
-      } catch(e) {}
       loadActivityList();
       if (typeof renderMachineOverview === 'function') renderMachineOverview();
       if (typeof renderReconciliationSummary === 'function') renderReconciliationSummary();
@@ -3833,7 +3674,7 @@
 
       let sources = [];
       try {
-        sources = JSON.parse(localStorage.getItem(getBranchStorageKey('sources')) || '[]');
+        sources = JSON.parse(localStorage.getItem(`gs_data_${username}_${branchKey}_sources`) || '[]');
       } catch(e) {}
 
       if (!Array.isArray(sources) || sources.length === 0) {
@@ -3852,7 +3693,7 @@
 
       let activities = [];
       try {
-        activities = JSON.parse(localStorage.getItem(getBranchStorageKey('activity')) || '[]');
+        activities = JSON.parse(localStorage.getItem(`gs_data_${username}_${branchKey}_activity`) || '[]');
       } catch(e) {}
 
       // Kiểm tra xem nguồn phát thải công nghệ nào chưa có bản ghi sản lượng thực tế
@@ -3983,6 +3824,50 @@
     window.removeActivityDaysOff = removeActivityDaysOff;
     window.autoGenerateDailyOperationalRecords = autoGenerateDailyOperationalRecords;
 
+    window.toggleActivityTableHeight = function() {
+      const card = document.getElementById('activity-table-card');
+      const btn = document.getElementById('btn-toggle-table-height');
+      if (!card) return;
+      if (card.style.maxHeight === 'none') {
+        card.style.maxHeight = '420px';
+        if (btn) btn.innerText = 'Mở rộng bảng';
+      } else {
+        card.style.maxHeight = 'none';
+        if (btn) btn.innerText = 'Thu gọn bảng';
+      }
+    };
+
+    window.toggleMachineTableHeight = function() {
+      const card = document.getElementById('machine-overview-table-container');
+      const btn = document.getElementById('btn-toggle-machine-table-height');
+      if (!card) return;
+      if (card.style.maxHeight === 'none') {
+        card.style.maxHeight = '380px';
+        if (btn) btn.innerText = 'Mở rộng bảng';
+      } else {
+        card.style.maxHeight = 'none';
+        if (btn) btn.innerText = 'Thu gọn bảng';
+      }
+    };
+
+    window.toggleDayOffMenu = function(e) {
+      if (e && typeof e.stopPropagation === 'function') e.stopPropagation();
+      const menu = document.getElementById('day-off-dropdown-menu');
+      if (!menu) return;
+      const isOpen = menu.style.display === 'block';
+      menu.style.display = isOpen ? 'none' : 'block';
+    };
+
+    window.toggleActivityCustomFilter = function(e) {
+      if (e && typeof e.stopPropagation === 'function') e.stopPropagation();
+      const dropdown = document.getElementById('activity-custom-filter-dropdown');
+      if (!dropdown) return;
+      dropdown.classList.toggle('open');
+      if (dropdown.classList.contains('open') && typeof renderActCol1 === 'function') {
+        renderActCol1();
+      }
+    };
+
     window.loadActivityList = loadActivityList;
     window.renderMachineOverview = renderMachineOverview;
     window.renderReconciliationSummary = renderReconciliationSummary;
@@ -3997,4 +3882,5 @@
     renderMachineOverview();
     renderReconciliationSummary();
   }
-});
+})();
+

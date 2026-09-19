@@ -1115,9 +1115,9 @@
                 </p>
               </div>
               <div style="display: flex; gap: 8px; align-items: center; flex-wrap: wrap;">
-                <button type="button" id="btn-toggle-machine-table-height" class="btn btn-secondary" style="font-size: 0.78rem; padding: 0.38rem 0.75rem; background: #f1f5f9; color: #475569; border: 1px solid #cbd5e1; border-radius: 6px; white-space: nowrap; cursor: pointer;" title="Chuyển đổi chiều cao bảng theo dõi thiết bị để dễ nhìn">Mở rộng bảng</button>
+                <button type="button" id="btn-toggle-machine-table-height" onclick="if(typeof window.toggleMachineTableHeight==='function') window.toggleMachineTableHeight();" class="btn btn-secondary" style="font-size: 0.78rem; padding: 0.38rem 0.75rem; background: #f1f5f9; color: #475569; border: 1px solid #cbd5e1; border-radius: 6px; white-space: nowrap; cursor: pointer;" title="Chuyển đổi chiều cao bảng theo dõi thiết bị để dễ nhìn">Mở rộng bảng</button>
                 <div style="position: relative; display: inline-block;">
-                  <button type="button" id="btn-day-off-menu" class="btn btn-outline" style="border: 1px solid #e11d48; color: #be123c; background: #fff1f2; font-size: 0.8rem; padding: 0.4rem 0.8rem; border-radius: 6px; cursor: pointer; display: flex; align-items: center; gap: 4px;" title="Quản lý xóa ngày nghỉ ca máy (Chủ nhật, Thứ 7, Ngày Lễ / Tết VN)">
+                  <button type="button" id="btn-day-off-menu" onclick="if(typeof window.toggleDayOffMenu==='function') window.toggleDayOffMenu(event);" class="btn btn-outline" style="border: 1px solid #e11d48; color: #be123c; background: #fff1f2; font-size: 0.8rem; padding: 0.4rem 0.8rem; border-radius: 6px; cursor: pointer; display: flex; align-items: center; gap: 4px;" title="Quản lý xóa ngày nghỉ ca máy (Chủ nhật, Thứ 7, Ngày Lễ / Tết VN)">
                     <span>Quản lý ngày nghỉ</span>
                     <span style="font-size: 0.65rem;">▼</span>
                   </button>
@@ -1125,20 +1125,20 @@
                     <div style="padding: 6px 12px; font-size: 0.72rem; font-weight: 700; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 1px solid #f1f5f9;">
                       Xóa ca máy theo ngày nghỉ
                     </div>
-                    <button type="button" id="btn-remove-sundays" style="width: 100%; text-align: left; background: none; border: none; padding: 8px 14px; font-size: 0.8rem; color: #334155; cursor: pointer; display: flex; flex-direction: column;" onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background='none'">
+                    <button type="button" id="btn-remove-sundays" onclick="if(typeof window.removeActivityDaysOff==='function') window.removeActivityDaysOff('sundays');" style="width: 100%; text-align: left; background: none; border: none; padding: 8px 14px; font-size: 0.8rem; color: #334155; cursor: pointer; display: flex; flex-direction: column;" onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background='none'">
                       <strong style="color: #dc2626;">Xóa tất cả Chủ nhật</strong>
                       <span style="font-size: 0.72rem; color: #64748b;">Dành cho nhà máy chạy 6 ngày/tuần (Nghỉ CN)</span>
                     </button>
-                    <button type="button" id="btn-remove-weekends" style="width: 100%; text-align: left; background: none; border: none; padding: 8px 14px; font-size: 0.8rem; color: #334155; cursor: pointer; display: flex; flex-direction: column;" onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background='none'">
+                    <button type="button" id="btn-remove-weekends" onclick="if(typeof window.removeActivityDaysOff==='function') window.removeActivityDaysOff('weekends');" style="width: 100%; text-align: left; background: none; border: none; padding: 8px 14px; font-size: 0.8rem; color: #334155; cursor: pointer; display: flex; flex-direction: column;" onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background='none'">
                       <strong style="color: #d97706;">Xóa Thứ 7 & Chủ nhật</strong>
                       <span style="font-size: 0.72rem; color: #64748b;">Dành cho nhà máy chạy 5 ngày/tuần (Nghỉ T7 & CN)</span>
                     </button>
-                    <button type="button" id="btn-remove-holidays" style="width: 100%; text-align: left; background: none; border: none; padding: 8px 14px; font-size: 0.8rem; color: #334155; cursor: pointer; display: flex; flex-direction: column;" onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background='none'">
+                    <button type="button" id="btn-remove-holidays" onclick="if(typeof window.removeActivityDaysOff==='function') window.removeActivityDaysOff('holidays');" style="width: 100%; text-align: left; background: none; border: none; padding: 8px 14px; font-size: 0.8rem; color: #334155; cursor: pointer; display: flex; flex-direction: column;" onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background='none'">
                       <strong style="color: #0284c7;">Xóa Ngày Lễ / Tết VN</strong>
                       <span style="font-size: 0.72rem; color: #64748b;">Nghỉ Tết Nguyên Đán, 30/4, 1/5, 2/9, Giỗ Tổ</span>
                     </button>
                     <div style="border-top: 1px solid #f1f5f9; margin: 4px 0;"></div>
-                    <button type="button" id="btn-remove-custom-date" style="width: 100%; text-align: left; background: none; border: none; padding: 8px 14px; font-size: 0.8rem; color: #475569; cursor: pointer; display: flex; flex-direction: column;" onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background='none'">
+                    <button type="button" id="btn-remove-custom-date" onclick="if(typeof window.removeActivityDaysOff==='function') window.removeActivityDaysOff('custom');" style="width: 100%; text-align: left; background: none; border: none; padding: 8px 14px; font-size: 0.8rem; color: #475569; cursor: pointer; display: flex; flex-direction: column;" onmouseover="this.style.background='#f8fafc'" onmouseout="this.style.background='none'">
                       <strong>Xóa ca máy ngày cụ thể...</strong>
                       <span style="font-size: 0.72rem; color: #64748b;">Chọn một ngày bảo trì hoặc sự cố đột xuất</span>
                     </button>
@@ -1215,7 +1215,7 @@
 
               <!-- Lọc theo Nguồn phát thải -->
               <div class="custom-select-container" style="min-width: 200px; max-width: 280px; position: relative;">
-                <div class="custom-select-input" id="activity-custom-filter-input" style="height: 34px; font-size: 0.78rem; display: flex; align-items: center;">-- Tất cả Nguồn --</div>
+                <div class="custom-select-input" id="activity-custom-filter-input" onclick="if(typeof window.toggleActivityCustomFilter==='function') window.toggleActivityCustomFilter(event);" style="height: 34px; font-size: 0.78rem; display: flex; align-items: center; cursor: pointer;">-- Tất cả Nguồn --</div>
                 <div class="custom-select-dropdown" id="activity-custom-filter-dropdown" style="position: absolute; top: 100%; left: 0; width: 560px; max-width: min(560px, calc(100vw - 320px)); z-index: 1050; box-shadow: 0 10px 25px rgba(0,0,0,0.15);">
                   <div class="dropdown-col" id="act-col-1" style="min-width: 170px;"></div>
                   <div class="dropdown-col" id="act-col-2" style="min-width: 170px;"></div>
@@ -1237,12 +1237,12 @@
               <div style="display: flex; gap: 8px; align-items: center;">
                 <button type="button" id="btn-act-filter-ytd" class="btn btn-secondary" style="font-size: 0.78rem; padding: 0.38rem 0.75rem; background: #e0f2fe; color: #0369a1; border: 1px solid #7dd3fc; font-weight: 600; white-space: nowrap;" title="Lọc hiển thị dữ liệu hoạt động lũy kế từ đầu năm đến ngày hôm nay">Đến hôm nay</button>
                 <button type="button" id="btn-jump-reconcile" class="btn btn-secondary" style="font-size: 0.78rem; padding: 0.38rem 0.75rem; background: #f1f5f9; color: #475569; border: 1px solid #cbd5e1; white-space: nowrap;" title="Cuộn nhanh xuống bảng đối soát năng lượng">Xuống Đối soát &darr;</button>
-                <button type="button" id="btn-toggle-table-height" class="btn btn-secondary" style="font-size: 0.78rem; padding: 0.38rem 0.75rem; background: #f1f5f9; color: #475569; border: 1px solid #cbd5e1; white-space: nowrap;" title="Chuyển đổi chiều cao bảng để dễ nhìn">Mở rộng bảng</button>
+                <button type="button" id="btn-toggle-table-height" onclick="if(typeof window.toggleActivityTableHeight==='function') window.toggleActivityTableHeight();" class="btn btn-secondary" style="font-size: 0.78rem; padding: 0.38rem 0.75rem; background: #f1f5f9; color: #475569; border: 1px solid #cbd5e1; white-space: nowrap;" title="Chuyển đổi chiều cao bảng để dễ nhìn">Mở rộng bảng</button>
               </div>
 
               <!-- Nhóm nút hành động bên phải -->
               <div style="display: flex; gap: 8px; align-items: center;">
-                <button type="button" id="btn-quick-log-production" class="btn btn-secondary" style="font-size: 0.82rem; font-weight: 600; padding: 0.42rem 0.95rem; background: #fff7ed; color: #c2410c; border: 1px solid #fdba74; white-space: nowrap;" title="Ghi nhận nhanh sản lượng phôi thép / sản phẩm ca ngày hôm nay">Chốt sản lượng ca/ngày</button>
+                <button type="button" id="btn-quick-log-production" onclick="if(typeof window.triggerQuickProductionInput==='function') window.triggerQuickProductionInput();" class="btn btn-secondary" style="font-size: 0.82rem; font-weight: 600; padding: 0.42rem 0.95rem; background: #fff7ed; color: #c2410c; border: 1px solid #fdba74; white-space: nowrap;" title="Ghi nhận nhanh sản lượng phôi thép / sản phẩm ca ngày hôm nay">Chốt sản lượng ca/ngày</button>
                 <button type="button" id="btn-reset-test-data" class="btn btn-secondary" style="font-size: 0.78rem; padding: 0.38rem 0.75rem; background: #fff1f2; color: #be123c; border: 1px solid #fecdd3; white-space: nowrap;" title="Xóa dữ liệu hoạt động, thiết bị và nguồn phát thải đã lưu để kiểm thử lại từ đầu">Đặt lại dữ liệu test</button>
                 <button id="btn-add-activity" class="btn btn-primary" onclick="if(typeof window.openActivityModal==='function') window.openActivityModal();" style="font-size: 0.82rem; font-weight: 600; padding: 0.42rem 1.1rem; white-space: nowrap; box-shadow: 0 1px 2px rgba(0,0,0,0.1);">+ Thêm Dữ liệu hoạt động</button>
               </div>
@@ -2244,6 +2244,9 @@
           if (typeof loadEquipmentList === 'function') {
             try { loadEquipmentList(); } catch(e) {}
           }
+          if (typeof updateEquipmentTemplateButtonLabel === 'function') {
+            try { updateEquipmentTemplateButtonLabel(); } catch(e) {}
+          }
         } else if (target === 'view-source') {
           if (typeof loadSourceList === 'function') {
             try { loadSourceList(); } catch(e) {}
@@ -2251,6 +2254,15 @@
         } else if (target === 'view-activity') {
           if (typeof window.loadActivityList === 'function') {
             try { window.loadActivityList(); } catch(e) {}
+          }
+          if (typeof window.renderMachineOverview === 'function') {
+            try { window.renderMachineOverview(); } catch(e) {}
+          }
+          if (typeof window.renderReconciliationSummary === 'function') {
+            try { window.renderReconciliationSummary(); } catch(e) {}
+          }
+          if (typeof window.updateProductionReminderBanner === 'function') {
+            try { window.updateProductionReminderBanner(); } catch(e) {}
           }
         } else if (target === 'view-report') {
           try { renderReport(); } catch(e) {}
@@ -2352,16 +2364,10 @@
         if (actModeContainer) actModeContainer.style.display = '';
       }
 
-      // Tự động điều chỉnh bộ lọc chứng từ theo vai trò
+      // Bộ lọc chứng từ theo vai trò: Mặc định hiển thị tất cả dữ liệu để tránh bị ẩn nhầm số liệu
       const filterRoleEl = document.getElementById('act-filter-role');
       if (filterRoleEl) {
-        if (role === 'accountant') {
-          filterRoleEl.value = 'accountant';
-        } else if (role === 'engineer') {
-          filterRoleEl.value = 'engineer';
-        } else {
-          filterRoleEl.value = '';
-        }
+        filterRoleEl.value = '';
       }
 
       // Reset dropdown nguồn phát thải về "-- Tất cả Nguồn --" để không bị đơ hoặc kẹt bộ lọc cũ
@@ -3736,37 +3742,47 @@
       // 1. Xac dinh nganh nghe hien tai cua co so / chi nhanh dang chon tren thanh dieu huong
       let currentIndustry = '';
 
-      // Uu tien 1: Lay nganh nghe cua Chi nhanh dang chon tren #branch-selector
+      // Uu tien 1: Lay truc tiep tu dropdown nganh nghe dang chon tren giao dien (#ci-setup-industry / #setup-industry)
       try {
-        const branchEl = document.getElementById('branch-selector');
-        const activeBranchName = (branchEl && branchEl.value) ? branchEl.value.trim() : '';
-        const userStr = localStorage.getItem('gs_current_user') || localStorage.getItem('greenshift_current_user');
-        const users = JSON.parse(localStorage.getItem('gs_users') || '[]');
-        const u = users.find(x => x.username === userStr || x.email === userStr) || {};
-        const comp = u.company || JSON.parse(localStorage.getItem('gs_v2_company') || '{}');
-
-        if (activeBranchName && activeBranchName !== 'Trụ sở chính' && Array.isArray(comp.branches)) {
-          const matchedBranch = comp.branches.find(b => b && b.name && b.name.trim().toLowerCase() === activeBranchName.toLowerCase());
-          if (matchedBranch && matchedBranch.industry) {
-            currentIndustry = matchedBranch.industry;
-          }
+        const indSelect = document.getElementById('ci-setup-industry') || document.getElementById('setup-industry');
+        if (indSelect && indSelect.value && indSelect.value.trim().length > 0) {
+          currentIndustry = indSelect.value.trim();
         }
-        if (!currentIndustry && comp.industry) {
-          currentIndustry = comp.industry;
-        }
-      } catch (e) {
-        console.warn('Loi doc nganh nghe chi nhanh:', e);
-      }
+      } catch (e) {}
 
-      // Uu tien 2: Lay tu dropdown ci-setup-industry trong form
+      // Uu tien 2: Lay nganh nghe cua Chi nhanh dang chon tren #branch-selector (neu khac Tru so chinh)
       if (!currentIndustry) {
         try {
-          const indSelect = document.getElementById('ci-setup-industry') || document.getElementById('setup-industry');
-          if (indSelect && indSelect.value) currentIndustry = indSelect.value;
-        } catch (e) {}
+          const branchEl = document.getElementById('branch-selector');
+          const activeBranchName = (branchEl && branchEl.value) ? branchEl.value.trim() : '';
+          const userStr = localStorage.getItem('gs_current_user') || localStorage.getItem('greenshift_current_user');
+          const users = JSON.parse(localStorage.getItem('gs_users') || '[]');
+          const u = users.find(x => x.username === userStr || x.email === userStr) || {};
+          const comp = u.company || JSON.parse(localStorage.getItem('gs_v2_company') || '{}');
+
+          if (activeBranchName && activeBranchName !== 'Trụ sở chính' && Array.isArray(comp.branches)) {
+            const matchedBranch = comp.branches.find(b => b && b.name && b.name.trim().toLowerCase() === activeBranchName.toLowerCase());
+            if (matchedBranch && matchedBranch.industry) {
+              currentIndustry = matchedBranch.industry;
+            }
+          }
+          if (!currentIndustry && comp.industry) {
+            currentIndustry = comp.industry;
+          }
+        } catch (e) {
+          console.warn('Loi doc nganh nghe chi nhanh:', e);
+        }
       }
 
       if (!currentIndustry) currentIndustry = 'Sắt Thép';
+
+      try {
+        const toast = document.createElement('div');
+        toast.textContent = `📥 Đang tải file mẫu thiết bị Excel cho ngành: ${currentIndustry}`;
+        toast.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#0284c7;color:#fff;padding:10px 22px;border-radius:8px;font-size:0.85rem;font-weight:600;z-index:99999;box-shadow:0 4px 16px rgba(0,0,0,0.2);';
+        document.body.appendChild(toast);
+        setTimeout(() => toast.remove(), 3500);
+      } catch(e) {}
 
       const isSteel = (!currentIndustry || currentIndustry === 'Sắt Thép' || currentIndustry.toLowerCase().includes('thép'));
 
@@ -3917,6 +3933,50 @@
       } catch(e) {}
     }
 
+    function updateEquipmentTemplateButtonLabel(industry) {
+      const btn = document.getElementById('btn-download-eq-template');
+      if (!btn) return;
+      let ind = industry;
+      if (!ind) {
+        const indSelect = document.getElementById('ci-setup-industry') || document.getElementById('setup-industry');
+        if (indSelect && indSelect.value) ind = indSelect.value.trim();
+      }
+      if (!ind) {
+        try {
+          const comp = JSON.parse(localStorage.getItem('gs_v2_company') || '{}');
+          if (comp.industry) ind = comp.industry;
+        } catch(e) {}
+      }
+      if (!ind) ind = 'Sắt Thép';
+      btn.innerText = `Tải file mẫu (${ind})`;
+      btn.title = `Tải file Excel mẫu danh mục thiết bị cho ngành ${ind}`;
+    }
+    window.updateEquipmentTemplateButtonLabel = updateEquipmentTemplateButtonLabel;
+
+    // Lắng nghe thay đổi ngành nghề trên ci-setup-industry để tự động đồng bộ ngay
+    const indSelectCi = document.getElementById('ci-setup-industry');
+    if (indSelectCi) {
+      indSelectCi.addEventListener('change', function() {
+        const newInd = this.value;
+        updateEquipmentTemplateButtonLabel(newInd);
+        try {
+          let comp = JSON.parse(localStorage.getItem('gs_v2_company') || '{}');
+          comp.industry = newInd;
+          localStorage.setItem('gs_v2_company', JSON.stringify(comp));
+
+          const userStr = localStorage.getItem('gs_current_user') || localStorage.getItem('greenshift_current_user');
+          let users = JSON.parse(localStorage.getItem('gs_users') || '[]');
+          const uIdx = users.findIndex(x => x.username === userStr || x.email === userStr);
+          if (uIdx !== -1) {
+            if (!users[uIdx].company) users[uIdx].company = {};
+            users[uIdx].company.industry = newInd;
+            localStorage.setItem('gs_users', JSON.stringify(users));
+          }
+        } catch(e) {}
+      });
+    }
+    try { updateEquipmentTemplateButtonLabel(); } catch(e) {}
+
     const btnDownloadTemplate = document.getElementById('btn-download-eq-template');
     if (btnDownloadTemplate) {
       btnDownloadTemplate.addEventListener('click', downloadEquipmentTemplate);
@@ -3990,41 +4050,7 @@
             let unmappedCount = 0;
             const analyzedRows = [];
 
-            const isStandardTemplate = rows.some(r => {
-              const asset = (r['Số tài sản'] || r['Mã tài sản'] || r['asset'] || '').toString();
-              const name = (r['Tên thiết bị'] || r['Loại thiết bị'] || '').toString();
-              return asset.includes('STEEL-') || name.includes('Lò hồ quang') || name.includes('tinh luyện thùng') || name.includes('phôi cán nóng');
-            });
-
-            if (!isStandardTemplate && typeof window.findStandardEquipmentSmart === 'function') {
-              rows.forEach((r, idx) => {
-                const rawName = (r['Loại thiết bị'] || r['Tên thiết bị'] || r['name'] || '').toString().trim();
-                const rawCat = (r['Nguồn phát thải'] || '').toString().trim();
-                if (!rawName) return;
-                const matchResult = window.findStandardEquipmentSmart(rawName, rawCat);
-                const conf = matchResult ? matchResult.confidence : 0;
-                if (!matchResult || conf < 0.70) {
-                  needsReconciliation = true;
-                  unmappedCount++;
-                }
-                analyzedRows.push({
-                  rowIndex: idx,
-                  raw: r,
-                  rawName: rawName,
-                  match: matchResult ? matchResult.equipment : null,
-                  confidence: matchResult ? matchResult.confidence : 0.4,
-                  matchReason: matchResult ? matchResult.matchReason : 'unmapped'
-                });
-              });
-            }
-
-            if (!isStandardTemplate && needsReconciliation && typeof window.openSmartEquipmentMappingModal === 'function') {
-              window.openSmartEquipmentMappingModal(analyzedRows, function(reconciledRows) {
-                executeCommitImport(reconciledRows);
-              }, { autoTriggered: true, unmappedCount: unmappedCount });
-              return;
-            }
-
+            // Nạp trực tiếp toàn bộ danh mục thiết bị từ file Excel theo đúng yêu cầu người dùng
             executeCommitImport(rows);
 
             function executeCommitImport(targetRows) {

@@ -33,11 +33,12 @@ function checkVnPublicHoliday(dateStr) {
 }
 
 function renderDashboard() {
-  const rawUser = (localStorage.getItem('gs_current_user') || 'guest').trim();
+  const username = localStorage.getItem('gs_current_user') || 'guest';
+  const rawUser = username.trim();
   const userSlug = rawUser.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '') || 'guest';
   const branchEl = document.getElementById('branch-selector');
   const branchName = (branchEl && branchEl.value) ? branchEl.value : 'main';
-  const branchKey = branchName.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '') || 'main';
+  const branchKey = branchName.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
   const storageKey = `gs_data_${userSlug}_${branchKey}_activity`;
   
   const yearEl = document.getElementById('dash-year-select');
@@ -124,15 +125,7 @@ function renderDashboard() {
     }
   }
 
-  let activities = JSON.parse(localStorage.getItem(storageKey) || '[]');
-  if (activities.length === 0) {
-    const rawKey = `gs_data_${rawUser}_${branchKey}_activity`;
-    const altKeys = [rawKey, `gs_data_${userSlug}_tru_so_chinh_activity`, `gs_data_${rawUser}_tru_so_chinh_activity`];
-    for (const ak of altKeys) {
-      const cand = JSON.parse(localStorage.getItem(ak) || '[]');
-      if (cand && cand.length > 0) { activities = cand; break; }
-    }
-  }
+  const activities = JSON.parse(localStorage.getItem(storageKey) || '[]');
   
   // Filter by year and YTD
   const filtered = activities.filter(act => {
@@ -142,15 +135,7 @@ function renderDashboard() {
   });
   
   // Load sources to get correct Scope mappings
-  let sources = JSON.parse(localStorage.getItem(`gs_data_${userSlug}_${branchKey}_sources`) || '[]');
-  if (sources.length === 0) {
-    const rawKey = `gs_data_${rawUser}_${branchKey}_sources`;
-    const altKeys = [rawKey, `gs_data_${userSlug}_tru_so_chinh_sources`, `gs_data_${rawUser}_tru_so_chinh_sources`];
-    for (const ak of altKeys) {
-      const cand = JSON.parse(localStorage.getItem(ak) || '[]');
-      if (cand && cand.length > 0) { sources = cand; break; }
-    }
-  }
+  const sources = JSON.parse(localStorage.getItem(`gs_data_${userSlug}_${branchKey}_sources`) || '[]');
   const sourceMap = {};
   const sourceTypeMap = {};
   const sourceDaysWeekMap = {};

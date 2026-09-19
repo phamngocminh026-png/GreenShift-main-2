@@ -2440,3 +2440,158 @@ window.calcEquipmentAnnual = function(capacity, loadFactor, hoursPerDay, daysPer
   const annual = Math.round(daily * d * 52 * 1000) / 1000;
   return { hourly, daily, annual };
 };
+
+// Hàm cung cấp Thương hiệu / Mẫu mã thực tế, chuẩn công nghiệp thay cho mô tả dài
+window.getEquipmentBrandModel = function(eq) {
+  if (!eq) return 'Tiêu chuẩn kỹ thuật';
+  if (eq.brandModel && typeof eq.brandModel === 'string' && eq.brandModel.trim().length > 0) {
+    return eq.brandModel.trim();
+  }
+  const code = (eq.code || '').toUpperCase();
+  const name = (eq.name || '').toLowerCase();
+
+  const codeMap = {
+    // 1. Cơ khí chế tạo (MECHANICAL)
+    'MECH-HEAT-IND': 'Inductoheat IH-500 / Mỹ',
+    'MECH-CNC-LASER': 'Trumpf TruLaser 5030 / Đức',
+    'MECH-PAINT-LINE': 'Wagner Powder Line Sprint / Đức',
+    'MECH-PRESS-HYD': 'Komatsu H1F-500 / Nhật Bản',
+    'MECH-WELD-ROBOT': 'Yaskawa Motoman AR2010 / Nhật Bản',
+
+    // 2. Dệt may (TEXTILE)
+    'TEX-BOILER-ST': 'Miura LX-200 / Nhật Bản',
+    'TEX-STENTER-01': 'Monforts Montex 8500 / Đức',
+    'TEX-DYE-JET': 'Thies iMaster H2O / Đức',
+    'TEX-WEAVE-LINE': 'Tsudakoma ZAX9200i / Nhật Bản',
+    'TEX-SEW-PLANT': 'Juki DDL-9000C / Nhật Bản',
+    'TEX-DRYER-TUMB': 'Tongyang Tumbler 150 / Hàn Quốc',
+
+    // 3. Da giày (FOOTWEAR)
+    'SHOE-MOLD-EVA': 'Tien Kang TK-688 EVA / Đài Loan',
+    'SHOE-GLUE-DRY': 'Desma Direct Soling / Đức',
+    'SHOE-SEW-HIGH': 'Brother S-7300A / Nhật Bản',
+    'SHOE-CUT-AUTO': 'Atom FlashCut 888 / Ý',
+    'SHOE-VULCAN-01': 'Svit Vulcanizer 200 / CH Séc',
+
+    // 4. Thực phẩm & Đồ uống (FOOD_BEVERAGE)
+    'FOOD-BOILER-UHT': 'Tetra Pak VTIS / Thụy Điển',
+    'FOOD-IQF-FREEZE': 'OctoFrost 1000 / Thụy Điển',
+    'FOOD-SPRAY-DRY': 'GEA Niro Spray Dryer / Đan Mạch',
+    'FOOD-OVEN-LPG': 'Miwe Roll-in e+ / Đức',
+    'FOOD-BOTTLING': 'Krones Modulfill / Đức',
+
+    // 5. Giấy & Bột giấy (PAPER)
+    'PAPER-BOILER-BIO': 'Andritz PowerFluid / Áo',
+    'PAPER-DIGEST-01': 'Valmet Continuous Digester / Phần Lan',
+    'PAPER-YANKEE-01': 'Voith Steel Yankee / Đức',
+    'PAPER-MACHINE-01': 'Valmet OptiConcept M / Phần Lan',
+    'PAPER-PULPER-01': 'Kadant Black Clawson / Mỹ',
+    'PAPER-WWTP-AERO': 'Veolia AnoxKaldnes / Pháp',
+
+    // 6. Hóa chất & Nhựa (CHEMICAL_PLASTIC)
+    'PLAST-INJECT-01': 'Engel Victory 500 / Áo',
+    'PLAST-EXTRUD-01': 'KraussMaffei ZE-60 / Đức',
+    'CHEM-REACT-POLY': 'Pfaudler Glasteel 10m3 / Mỹ',
+    'PLAST-COOL-TOWER': 'Spig Cooling Tower / Ý',
+    'CHEM-MIX-HIGH': 'IKA Ultra-Turrax / Đức',
+
+    // 7. Gỗ & Chế biến gỗ (WOOD)
+    'WOOD-KILN-BIO': 'Mahild Dry Kiln / Đức',
+    'WOOD-SAW-MULTI': 'Weinig Profimat 50 / Đức',
+    'WOOD-SPRAY-PU': 'Cefla Mito Automatic / Ý',
+    'WOOD-DUST-CYCLO': 'Nederman FilterBox / Thụy Điển',
+    'WOOD-CNC-ROUTER': 'Biesse Rover B / Ý',
+
+    // 8. Điện tử & Bán dẫn (ELECTRONICS)
+    'ELEC-HVAC-CLEAN': 'Daikin Cleanroom AHU / Nhật Bản',
+    'ELEC-SMT-LINE': 'Panasonic NPM-D3 / Nhật Bản',
+    'ELEC-REFLOW-01': 'Heller 1913 MK5 / Mỹ',
+    'ELEC-UPW-PLANT': 'Kurita UPW System / Nhật Bản',
+    'ELEC-AUTO-TEST': 'Keysight 3070 ICT / Mỹ',
+
+    // 9. Nhiệt điện & Năng lượng (POWER)
+    'POW-BOILER-PC': 'Mitsubishi Power Supercritical / Nhật Bản',
+    'POW-TURBINE-600': 'GE D10 Steam Turbine / Mỹ',
+    'POW-FGD-SULF': 'Andritz FGD Wet Scrubber / Áo',
+    'POW-ESP-DUST': 'FLSmidth Coromax ESP / Đan Mạch',
+    'POW-CW-PUMP': 'KSB SEZ Cooling Water / Đức',
+
+    // 10. Sản xuất Hydro (HYDROGEN)
+    'HYD-ELEC-ALK': 'Thyssenkrupp Nucera 20MW / Đức',
+    'HYD-COMP-700': 'Howden Diaphragm Compressor / Anh',
+    'HYD-DEOXO-DRY': 'Mahler AGS DeOxo Unit / Đức',
+    'HYD-COOL-CHILL': 'Carrier AquaForce 30XW / Mỹ',
+    'HYD-TRAILER-FILL': 'Hexagon Purus 500bar / Na Uy',
+
+    // 11. Nông nghiệp (AGRICULTURE)
+    'AGRI-FEED-MILL': 'Buhler AHPE 900 / Thụy Sĩ',
+    'AGRI-BARN-VENT': 'Munters EM50 Fan / Thụy Điển',
+    'AGRI-PUMP-IRR': 'Grundfos SP 95 / Đan Mạch',
+    'AGRI-DRYER-GRAIN': 'Satake Circulating Dryer / Nhật Bản',
+
+    // 12. Vận tải & Logistics (LOGISTICS)
+    'LOG-TRUCK-HEAVY': 'Volvo FH16 540 / Thụy Điển',
+    'LOG-COLD-STOR': 'Bitzer Screw Compressor / Đức',
+
+    // 13. Sắt Thép (STEEL)
+    'STEEL-EAF-01': 'Danieli FastArc 100T / Ý',
+    'STEEL-LRF-01': 'Primetals LRF-120T / Áo',
+    'STEEL-CCM-01': 'SMS Concast 4-Strand / Đức',
+    'STEEL-FURN-01': 'Tenova Walking Beam / Ý',
+    'STEEL-MILL-01': 'Mitsubishi HRC-1500 / Nhật Bản',
+    'STEEL-COLD-01': 'Andritz Sundwig 6-Hi / Áo',
+    'STEEL-PICKL-01': 'CMI Industry CPL-Line / Bỉ',
+    'STEEL-GALV-01': 'Nippon Steel CGL-300 / Nhật Bản',
+    'STEEL-WIRE-01': 'Morgan High-Speed Rod Mill / Mỹ',
+    'STEEL-PIPE-01': 'Kusano ERW Tube Mill 100 / Nhật Bản',
+    'STEEL-BOLT-01': 'National Machinery Cold Former / Mỹ',
+    'STEEL-CRANE-01': 'Konecranes Heavy Duty 150T / Phần Lan',
+
+    // 14. Xi măng (CEMENT)
+    'CEM-KILN-ROTARY': 'FLSmidth Rotary Kiln / Đan Mạch',
+    'CEM-MILL-RAW': 'Loesche Vertical Roller Mill / Đức',
+    'CEM-COOL-GRATE': 'Claudius Peters Cross-Bar / Đức',
+    'CEM-MILL-BALL': 'Polysius Ball Mill / Đức',
+
+    // 15. Thiết bị phụ trợ dùng chung (COMMON)
+    'BOILER-ST-01': 'Miura Boiler LX-200 / Nhật Bản',
+    'COMP-AIR-01': 'Atlas Copco GA 315 VSD / Thụy Điển',
+    'CHILL-AC-01': 'Daikin Water Chiller 160kW / Nhật Bản',
+    'FORK-ELEC-01': 'Toyota 8FBE20 (2 tấn) / Nhật Bản',
+    'FORK-DIESEL-01': 'Toyota 8FD50 (5 tấn) / Nhật Bản',
+    'GENSET-DIESEL-01': 'Cummins Power Command 850kVA / Mỹ',
+    'FIRE-PUMP-01': 'Ebara Fire Pump 75kW / Nhật Bản',
+    'TRANSFORMER-01': 'ABB SafeRing 24kV / Thụy Sĩ',
+    'SERVER-RACK-01': 'Dell PowerEdge R750 / Mỹ',
+    'CANTEEN-GAS-01': 'Rinnai Industrial Commercial / Nhật Bản',
+    'HVAC-OFFICE-01': 'Daikin VRV IV / Nhật Bản',
+    'LIGHT-LED-01': 'Philips HighBay LED / Hà Lan'
+  };
+
+  if (code && codeMap[code]) {
+    return codeMap[code];
+  }
+
+  // Keyword fallback
+  if (name.includes('laser') || name.includes('cnc')) return 'Trumpf TruLaser / Đức';
+  if (name.includes('cao tần') || name.includes('nhiệt luyện')) return 'Inductoheat / Mỹ';
+  if (name.includes('sơn') || name.includes('phun')) return 'Wagner Powder Line / Đức';
+  if (name.includes('ép') || name.includes('dập')) return 'Komatsu Press / Nhật Bản';
+  if (name.includes('hàn') || name.includes('robot')) return 'Yaskawa Motoman / Nhật Bản';
+  if (name.includes('lò hơi') || name.includes('boiler')) return 'Miura Boiler / Nhật Bản';
+  if (name.includes('nén khí') || name.includes('compressor')) return 'Atlas Copco / Thụy Điển';
+  if (name.includes('chiller') || name.includes('làm lạnh')) return 'Daikin Chiller / Nhật Bản';
+  if (name.includes('nâng') || name.includes('forklift')) return 'Toyota Forklift / Nhật Bản';
+  if (name.includes('phát điện') || name.includes('genset')) return 'Cummins Generator / Mỹ';
+  if (name.includes('may') || name.includes('khâu')) return 'Juki Industrial / Nhật Bản';
+  if (name.includes('dệt') || name.includes('loom')) return 'Tsudakoma Loom / Nhật Bản';
+  if (name.includes('nhuộm') || name.includes('dye')) return 'Thies iMaster / Đức';
+  if (name.includes('chiết') || name.includes('đóng chai') || name.includes('đóng lon')) return 'Krones Modulfill / Đức';
+  if (name.includes('hồ quang') || name.includes('eaf')) return 'Danieli FastArc / Ý';
+  if (name.includes('tinh luyện') || name.includes('lrf')) return 'Primetals LRF / Áo';
+  if (name.includes('đúc phôi') || name.includes('ccm')) return 'SMS Concast / Đức';
+  if (name.includes('nung') || name.includes('furnace')) return 'Tenova Walking Beam / Ý';
+
+  const shortName = (eq.name || 'Thiết bị').split('(')[0].trim();
+  return `${shortName} / Chuẩn Công nghiệp`;
+};

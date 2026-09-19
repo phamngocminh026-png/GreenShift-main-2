@@ -68,29 +68,59 @@
           const branchEl = document.getElementById('branch-selector');
           const branchName = (branchEl && branchEl.value) ? branchEl.value : 'main';
           const branchKey = branchName.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
-          const stored = localStorage.getItem(`gs_data_${userSlug}_${branchKey}_sources`);
+          const stored = localStorage.getItem(getBranchStorageKey('sources')) ||
+                         localStorage.getItem(`gs_data_${userSlug}_${branchKey}_sources`) ||
+                         localStorage.getItem(`gs_data_${username}_${branchKey}_sources`);
           if (stored) {
             const list = JSON.parse(stored);
             list.forEach(item => {
-              const scope = (typeof getScopeInfo === 'function') ? getScopeInfo(item.category, item.ef, item.type).label : (item.scope || 'Loại 1');
+              const scope = (typeof getScopeInfo === 'function') ? getScopeInfo(item.category, item.ef, item.type).label : (item.scope || 'Phạm vi 1');
               const cat = item.category || 'Khác';
               const type = item.type || item.name || '';
               if (!tree[scope]) tree[scope] = {};
               if (!tree[scope][cat]) tree[scope][cat] = new Set();
               if (type) tree[scope][cat].add(type);
             });
-            return tree;
+            if (Object.keys(tree).length > 0) return tree;
           }
         } catch(e) {}
       }
       sourceRows.forEach(row => {
-        const scope = (row.cells[0]?.textContent || '').trim();
-        const category = row.dataset.category || (row.cells[1]?.textContent || '').trim();
+        const scope = (row.cells[0]?.textContent || '').trim() || 'Phạm vi 1';
+        const category = row.dataset.category || (row.cells[1]?.textContent || '').trim() || 'Khác';
         const type = row.dataset.type || '';
         if (!tree[scope]) tree[scope] = {};
         if (!tree[scope][category]) tree[scope][category] = new Set();
         if (type) tree[scope][category].add(type);
       });
+
+      // Nếu vẫn chưa có tree từ sources, trích xuất từ dữ liệu hoạt động thực tế
+      if (Object.keys(tree).length === 0) {
+        try {
+          const actStored = localStorage.getItem(getBranchStorageKey('activity'));
+          if (actStored) {
+            const acts = JSON.parse(actStored);
+            acts.forEach(a => {
+              const type = a.sourceType || a.sourceName || 'Tiêu thụ chung';
+              const isElec = type.includes('điện') || type.includes('Điện');
+              const scope = isElec ? 'Phạm vi 2' : 'Phạm vi 1';
+              const cat = isElec ? 'Tiêu thụ điện' : (type.includes('công nghiệp') ? 'Các quá trình công nghiệp' : 'Đốt cháy cố định');
+              if (!tree[scope]) tree[scope] = {};
+              if (!tree[scope][cat]) tree[scope][cat] = new Set();
+              tree[scope][cat].add(type);
+            });
+          }
+        } catch(e) {}
+      }
+
+      // Dự phòng tiêu chuẩn nếu hoàn toàn chưa có số liệu
+      if (Object.keys(tree).length === 0) {
+        tree['Phạm vi 2'] = { 'Tiêu thụ điện': new Set(['Điện lưới EVN mua ngoài (Tổng công tơ nhà máy)']) };
+        tree['Phạm vi 1'] = { 
+          'Đốt cháy cố định': new Set(['Dầu Diesel (DO) mua ngoài (Toàn nhà máy / Bồn tổng)', 'Khí dầu mỏ hóa lỏng LPG mua ngoài']),
+          'Đốt cháy động': new Set(['Xăng RON 95 / E5 mua ngoài (Xe công ty)'])
+        };
+      }
       return tree;
     }
 
@@ -101,10 +131,6 @@
       
       const tree = getDynamicTree();
       const scopes = Object.keys(tree);
-      if (scopes.length === 0) {
-        actCol1.innerHTML = '<div style="padding:1rem;color:#888;">Chưa có Nguồn phát thải nào</div>';
-        return;
-      }
 
       const clearDiv = document.createElement('div');
       clearDiv.className = 'dropdown-item';
@@ -116,6 +142,10 @@
         applyFilter('');
       };
       actCol1.appendChild(clearDiv);
+
+      if (scopes.length === 0) {
+        return;
+      }
 
       scopes.forEach(scope => {
         const div = document.createElement('div');
@@ -331,8 +361,17 @@
       const userSlug = rawUser.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '') || 'guest';
       const branchEl = document.getElementById('branch-selector');
       const branchName = (branchEl && branchEl.value) ? branchEl.value : 'main';
-      const branchKey = branchName.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
-      return `gs_data_${userSlug}_${branchKey}_${suffix}`;
+      const branchKey = branchName.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '') || 'main';
+      const slugKey = `gs_data_${userSlug}_${branchKey}_${suffix}`;
+      const rawKey = `gs_data_${rawUser}_${branchKey}_${suffix}`;
+
+      if (typeof localStorage !== 'undefined') {
+        const sVal = localStorage.getItem(slugKey);
+        if (sVal && sVal !== '[]' && sVal !== '{}') return slugKey;
+        const rVal = localStorage.getItem(rawKey);
+        if (rVal && rVal !== '[]' && rVal !== '{}') return rawKey;
+      }
+      return slugKey;
     }
 
     function saveActivityList() {
@@ -341,7 +380,20 @@
       rows.forEach(row => {
         data.push({ ...row.dataset });
       });
-      localStorage.setItem(getBranchStorageKey('activity'), JSON.stringify(data));
+
+      const username = localStorage.getItem('gs_current_user') || 'guest';
+      const rawUser = username.trim();
+      const userSlug = rawUser.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '') || 'guest';
+      const branchEl = document.getElementById('branch-selector');
+      const branchName = (branchEl && branchEl.value) ? branchEl.value : 'main';
+      const branchKey = branchName.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '') || 'main';
+
+      const slugKey = `gs_data_${userSlug}_${branchKey}_activity`;
+      const rawKey = `gs_data_${rawUser}_${branchKey}_activity`;
+      localStorage.setItem(slugKey, JSON.stringify(data));
+      if (rawKey !== slugKey) {
+        localStorage.setItem(rawKey, JSON.stringify(data));
+      }
 
       if (typeof renderMachineOverview === 'function') renderMachineOverview();
       if (typeof renderReconciliationSummary === 'function') renderReconciliationSummary();
@@ -357,7 +409,7 @@
         if (window.GreenShiftDB && typeof window.GreenShiftDB.pushActivities === 'function') {
           const branchEl = document.getElementById('branch-selector');
           const bName = (branchEl && branchEl.value) ? branchEl.value : 'main';
-          const bKey = bName.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
+          const bKey = bName.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '') || 'main';
           window.GreenShiftDB.pushActivities(bKey, data);
         }
       } catch (syncErr) {
@@ -367,7 +419,49 @@
 
     function loadActivityList() {
       tbody.innerHTML = '<tr id="no-activity-row"><td colspan="11" style="text-align: center; color: var(--color-text-secondary); padding: 3rem;">Chưa có dữ liệu</td></tr>';
-      const stored = localStorage.getItem(getBranchStorageKey('activity'));
+      const rawUser = (localStorage.getItem('gs_current_user') || 'guest').trim();
+      const userSlug = rawUser.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '') || 'guest';
+      const branchEl = document.getElementById('branch-selector');
+      const branchName = (branchEl && branchEl.value) ? branchEl.value : 'main';
+      const branchKey = branchName.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '') || 'main';
+
+      const normActKey = `gs_data_${userSlug}_${branchKey}_activity`;
+      const rawActKey = `gs_data_${rawUser}_${branchKey}_activity`;
+
+      let stored = localStorage.getItem(normActKey);
+      if (!stored && rawActKey !== normActKey) {
+        stored = localStorage.getItem(rawActKey);
+        if (stored) {
+          localStorage.setItem(normActKey, stored);
+        }
+      }
+
+      // Đọc nguồn phát thải từ các biến thể key để kiểm tra tính sẵn sàng phân bổ ca máy
+      let sources = [];
+      try {
+        const srcKey = getBranchStorageKey('sources');
+        const rawSrcKey = `gs_data_${rawUser}_${branchKey}_sources`;
+        const slugSrcKey = `gs_data_${userSlug}_${branchKey}_sources`;
+        const storedSrc = localStorage.getItem(slugSrcKey) ||
+                          localStorage.getItem(rawSrcKey) ||
+                          localStorage.getItem(srcKey) ||
+                          localStorage.getItem(`gs_data_${rawUser}_tru_so_chinh_sources`) ||
+                          localStorage.getItem(`gs_data_${userSlug}_tru_so_chinh_sources`);
+        if (storedSrc) sources = JSON.parse(storedSrc);
+      } catch(e) {}
+
+      // Tự động phân bổ ca máy chi tiết từng ngày (1..31 ngày) nếu đã có Thiết bị/Nguồn mà chưa có bản ghi
+      if ((!stored || stored === '[]') && sources.length > 0 && !isGeneratingOperationalRecords) {
+        isGeneratingOperationalRecords = true;
+        try {
+          const activeYear = document.getElementById('act-filter-year')?.value || '2026';
+          autoGenerateDailyOperationalRecords(activeYear, 'all', false);
+        } finally {
+          isGeneratingOperationalRecords = false;
+        }
+        return;
+      }
+
       if (!stored) return;
       try {
         let data = JSON.parse(stored);
@@ -396,7 +490,7 @@
             return;
           }
 
-          // Kiểm tra nếu dữ liệu ca ngày bị thiếu tháng nào trong 12 tháng, tự động bổ sung đủ
+          // Kiểm tra nếu dữ liệu ca ngày bị thiếu tháng nào trong 12 tháng hoặc chưa có auto_daily, tự động bổ sung đủ
           const activeYear = (data.find(a => a.date)?.date || '2026').split('-')[0];
           const dailyMonths = new Set();
           data.forEach(a => {
@@ -404,7 +498,7 @@
               dailyMonths.add(parseInt(a.date.split('-')[1], 10));
             }
           });
-          if (!isGeneratingOperationalRecords && dailyMonths.size > 0 && dailyMonths.size < 12) {
+          if (!isGeneratingOperationalRecords && dailyMonths.size < 12 && sources.length > 0) {
             isGeneratingOperationalRecords = true;
             try {
               autoGenerateDailyOperationalRecords(activeYear, 'all', false);
@@ -565,10 +659,13 @@
       } else {
         try {
           const username = localStorage.getItem('gs_current_user') || 'guest';
+          const userSlug = username.trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '') || 'guest';
           const branchEl = document.getElementById('branch-selector');
           const branchName = (branchEl && branchEl.value) ? branchEl.value : 'main';
           const branchKey = branchName.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
-          const stored = localStorage.getItem(`gs_data_${username}_${branchKey}_sources`);
+          const stored = localStorage.getItem(getBranchStorageKey('sources')) ||
+                         localStorage.getItem(`gs_data_${userSlug}_${branchKey}_sources`) ||
+                         localStorage.getItem(`gs_data_${username}_${branchKey}_sources`);
           if (stored) {
             const list = JSON.parse(stored);
             list.forEach(item => {
@@ -932,11 +1029,17 @@
         } else {
           try {
             const curUser = (localStorage.getItem('gs_current_user') || '').toLowerCase();
+            const userSlug = curUser.trim().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '') || 'guest';
             const branchEl = document.getElementById('branch-selector');
             const branchName = (branchEl && branchEl.value) ? branchEl.value : 'main';
             const branchKey = branchName.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
             const storageKey = `gs_data_${curUser}_${branchKey}_equipment`;
-            const eqList = JSON.parse(localStorage.getItem(storageKey) || '[]');
+            const eqList = JSON.parse(
+              localStorage.getItem(getBranchStorageKey('equipment')) ||
+              localStorage.getItem(`gs_data_${userSlug}_${branchKey}_equipment`) ||
+              localStorage.getItem(storageKey) ||
+              '[]'
+            );
             
             const matched = eqList.find(eq => eq.name === selected.text || (selected.text && selected.text.includes(eq.name)));
             const assetCode = (matched && matched.asset) ? matched.asset : (selected.dataset.eq || 'Chưa gán mã');
@@ -2535,23 +2638,23 @@
       const sourceRows = document.querySelectorAll('#source-tbody tr:not(#no-source-row)');
       const machineSources = [];
       sourceRows.forEach(row => {
-        const measure = row.dataset.measure || '';
+        const measure = (row.dataset.measure || '').toLowerCase();
         const opCap = parseFloat(row.dataset.opCapacity || row.dataset.capacity) || 0;
         const eqName = row.dataset.eq || row.dataset.type || '';
         const isProc = row.dataset.isProcessEmission === 'true' || 
-                       measure === 'Theo sản lượng sản phẩm' || 
+                       measure.includes('sản lượng') || 
                        Boolean(row.dataset.productionUnit) ||
                        (row.dataset.category && row.dataset.category.includes('công nghiệp'));
+        const loadVal = parseFloat(row.dataset.opLoad) || (isProc ? 100 : 80);
+        const hRate = parseFloat(row.dataset.hourlyRate) || (opCap > 0 ? Math.round(opCap * (loadVal / 100) * 1000) / 1000 : 0);
 
-        if (measure === 'Tự đánh giá' || measure.includes('liên tục') || measure === 'Đo liên tục' || opCap > 0 || isProc) {
-          const loadVal = parseFloat(row.dataset.opLoad) || (isProc ? 100 : 80);
-          const hRate = parseFloat(row.dataset.hourlyRate) || (opCap > 0 ? Math.round(opCap * (loadVal / 100) * 1000) / 1000 : 0);
+        if (measure.includes('tự đánh giá') || measure.includes('liên tục') || measure.includes('đo') || measure.includes('ước tính') || opCap > 0 || hRate > 0 || isProc) {
           machineSources.push({
             id: row.dataset.id,
             name: isProc ? `${row.dataset.type || 'Quá trình luyện thép'}${row.dataset.eq ? ' - ' + row.dataset.eq : ''}` : eqName,
             type: row.dataset.type || '',
             category: row.dataset.category || '',
-            measure: isProc ? 'Theo sản lượng (IPPU)' : (measure || 'Tự đánh giá'),
+            measure: isProc ? 'Theo sản lượng (IPPU)' : (row.dataset.measure || 'Tự đánh giá'),
             isProc: isProc,
             productionUnit: row.dataset.productionUnit || 'tấn',
             capacity: opCap,
@@ -2569,23 +2672,36 @@
       // Fallback nếu chưa tải lên DOM sourceRows
       if (machineSources.length === 0) {
         try {
-          const sources = JSON.parse(localStorage.getItem(getBranchStorageKey('sources')) || '[]');
+          const username = localStorage.getItem('gs_current_user') || 'guest';
+          const rawUser = username.trim();
+          const userSlug = rawUser.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '') || 'guest';
+          const branchEl = document.getElementById('branch-selector');
+          const branchName = (branchEl && branchEl.value) ? branchEl.value : 'main';
+          const branchKey = branchName.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '') || 'main';
+
+          const sources = JSON.parse(
+            localStorage.getItem(`gs_data_${userSlug}_${branchKey}_sources`) ||
+            localStorage.getItem(`gs_data_${rawUser}_${branchKey}_sources`) ||
+            localStorage.getItem(getBranchStorageKey('sources')) ||
+            '[]'
+          );
           sources.forEach(src => {
-            const measure = src.measure || src.measurementMethod || '';
+            const measure = (src.measure || src.measurementMethod || '').toLowerCase();
             const opCap = parseFloat(src.opCapacity || src.capacity) || 0;
             const isProc = src.isProcessEmission === 'true' || 
-                           measure === 'Theo sản lượng sản phẩm' || 
+                           measure.includes('sản lượng') || 
                            Boolean(src.productionUnit) ||
                            (src.category && src.category.includes('công nghiệp'));
-            if (measure === 'Tự đánh giá' || measure.includes('liên tục') || measure === 'Đo liên tục' || opCap > 0 || isProc) {
-              const loadVal = parseFloat(src.opLoad || src.load) || (isProc ? 100 : 80);
-              const hRate = parseFloat(src.hourlyRate) || (opCap > 0 ? Math.round(opCap * (loadVal / 100) * 1000) / 1000 : 0);
+            const loadVal = parseFloat(src.opLoad || src.load) || (isProc ? 100 : 80);
+            const hRate = parseFloat(src.hourlyRate) || (opCap > 0 ? Math.round(opCap * (loadVal / 100) * 1000) / 1000 : 0);
+
+            if (measure.includes('tự đánh giá') || measure.includes('liên tục') || measure.includes('đo') || measure.includes('ước tính') || opCap > 0 || hRate > 0 || isProc) {
               machineSources.push({
                 id: src.id,
                 name: isProc ? `${src.type || 'Quá trình luyện thép'}${src.eq ? ' - ' + src.eq : ''}` : (src.eq || src.type || src.name || ''),
                 type: src.type || '',
                 category: src.category || '',
-                measure: isProc ? 'Theo sản lượng (IPPU)' : (measure || 'Tự đánh giá'),
+                measure: isProc ? 'Theo sản lượng (IPPU)' : (src.measure || 'Tự đánh giá'),
                 isProc: isProc,
                 productionUnit: src.productionUnit || 'tấn',
                 capacity: opCap,
@@ -3010,7 +3126,9 @@
       keysToRemove.forEach(k => localStorage.removeItem(k));
 
       if (skipConfirm) {
-        if (typeof window.seedSteelPlantSampleData === 'function') {
+        if (typeof window.seedIndustrySampleData === 'function') {
+          window.seedIndustrySampleData(true);
+        } else if (typeof window.seedSteelPlantSampleData === 'function') {
           window.seedSteelPlantSampleData(true);
         }
         if (typeof window.loadActivityList === 'function') {
@@ -3044,9 +3162,11 @@
       let machineSources = [];
       sourceRows.forEach(r => {
         const d = r.dataset;
-        const measure = d.measure || '';
-        const isProcess = d.isProcessEmission === 'true' || (d.category && d.category.includes('công nghiệp'));
-        if (measure.includes('Tự đánh giá') || measure.includes('Đo liên tục') || d.opCapacity || d.hourlyRate || isProcess) {
+        const measure = (d.measure || d.measurementMethod || '').toLowerCase();
+        const isProcess = d.isProcessEmission === 'true' || measure.includes('sản lượng') || (d.category && d.category.includes('công nghiệp')) || Boolean(d.productionUnit);
+        const opCap = parseFloat(d.opCapacity || d.capacity) || 0;
+        const hRate = parseFloat(d.hourlyRate) || 0;
+        if (measure.includes('tự đánh giá') || measure.includes('đo') || measure.includes('liên tục') || measure.includes('ước tính') || opCap > 0 || hRate > 0 || isProcess || d.opLoad || d.opHoursDay) {
           machineSources.push({
             id: d.id,
             name: d.eq || d.type,
@@ -3056,12 +3176,12 @@
             isProcessEmission: isProcess ? 'true' : 'false',
             productionUnit: d.productionUnit || 'tấn',
             productName: d.productName || 'Sản phẩm',
-            opCapacity: parseFloat(d.opCapacity) || 0,
-            opCapUnit: d.opCapUnit || '',
-            opLoad: parseFloat(d.opLoad) || 80,
-            opHoursDay: parseFloat(d.opHoursDay) || 8,
-            opDaysWeek: parseFloat(d.opDaysWeek) || 6,
-            hourlyRate: parseFloat(d.hourlyRate) || 0,
+            opCapacity: opCap,
+            opCapUnit: d.opCapUnit || d.capUnit || '',
+            opLoad: parseFloat(d.opLoad || d.load) || 80,
+            opHoursDay: parseFloat(d.opHoursDay || d.hoursDay) || 8,
+            opDaysWeek: parseFloat(d.opDaysWeek || d.daysWeek) || 6,
+            hourlyRate: hRate || (opCap > 0 ? Math.round(opCap * ((parseFloat(d.opLoad || d.load) || 80) / 100) * 1000) / 1000 : 0),
             annualEstQty: parseFloat(d.annualEstQty) || 0,
             ef: d.ef || '',
             refrigerant: d.refrigerant || '',
@@ -3074,29 +3194,40 @@
       if (machineSources.length === 0) {
         try {
           const username = localStorage.getItem('gs_current_user') || 'guest';
+          const rawUser = username.trim();
+          const userSlug = rawUser.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '') || 'guest';
           const branchEl = document.getElementById('branch-selector');
           const branchName = (branchEl && branchEl.value) ? branchEl.value : 'main';
-          const branchKey = branchName.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
-          const sources = JSON.parse(localStorage.getItem(`gs_data_${username}_${branchKey}_sources`) || '[]');
+          const branchKey = branchName.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '') || 'main';
+          const sources = JSON.parse(
+            localStorage.getItem(`gs_data_${userSlug}_${branchKey}_sources`) ||
+            localStorage.getItem(`gs_data_${rawUser}_${branchKey}_sources`) ||
+            localStorage.getItem(getBranchStorageKey('sources')) ||
+            localStorage.getItem(`gs_data_${rawUser}_tru_so_chinh_sources`) ||
+            localStorage.getItem(`gs_data_${userSlug}_tru_so_chinh_sources`) ||
+            '[]'
+          );
           sources.forEach(d => {
-            const measure = d.measure || d.measurementMethod || '';
-            const isProcess = d.isProcessEmission === 'true' || (d.category && d.category.includes('công nghiệp'));
-            if (measure.includes('Tự đánh giá') || measure.includes('Đo liên tục') || d.opCapacity || d.hourlyRate || isProcess) {
+            const measure = (d.measure || d.measurementMethod || '').toLowerCase();
+            const isProcess = d.isProcessEmission === 'true' || measure.includes('sản lượng') || (d.category && d.category.includes('công nghiệp')) || Boolean(d.productionUnit);
+            const opCap = parseFloat(d.opCapacity || d.capacity) || 0;
+            const hRate = parseFloat(d.hourlyRate) || 0;
+            if (measure.includes('tự đánh giá') || measure.includes('đo') || measure.includes('liên tục') || measure.includes('ước tính') || opCap > 0 || hRate > 0 || isProcess || d.opLoad || d.opHoursDay) {
               machineSources.push({
                 id: d.id,
                 name: d.eq || d.type,
                 type: d.type || '',
                 eq: d.eq || '',
-                measure: measure,
+                measure: d.measure,
                 isProcessEmission: isProcess ? 'true' : 'false',
                 productionUnit: d.productionUnit || 'tấn',
                 productName: d.productName || 'Sản phẩm',
-                opCapacity: parseFloat(d.opCapacity || d.capacity) || 0,
+                opCapacity: opCap,
                 opCapUnit: d.opCapUnit || d.capUnit || '',
                 opLoad: parseFloat(d.opLoad || d.load) || 80,
                 opHoursDay: parseFloat(d.opHoursDay || d.hoursDay) || 8,
                 opDaysWeek: parseFloat(d.opDaysWeek || d.daysWeek) || 6,
-                hourlyRate: parseFloat(d.hourlyRate) || 0,
+                hourlyRate: hRate || (opCap > 0 ? Math.round(opCap * ((parseFloat(d.opLoad || d.load) || 80) / 100) * 1000) / 1000 : 0),
                 annualEstQty: parseFloat(d.annualEstQty) || 0,
                 ef: d.ef || '',
                 refrigerant: d.refrigerant || '',
@@ -3129,12 +3260,20 @@
 
       const curYear = year || (document.getElementById('act-filter-year')?.value || new Date().getFullYear().toString());
       const username = localStorage.getItem('gs_current_user') || 'guest';
+      const rawUser = username.trim();
+      const userSlug = rawUser.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '') || 'guest';
       const branchEl = document.getElementById('branch-selector');
       const branchName = (branchEl && branchEl.value) ? branchEl.value : 'main';
-      const branchKey = branchName.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
-      const activityKey = `gs_data_${username}_${branchKey}_activity`;
+      const branchKey = branchName.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '') || 'main';
+      const normActKey = `gs_data_${userSlug}_${branchKey}_activity`;
+      const rawActKey = `gs_data_${rawUser}_${branchKey}_activity`;
+      const activityKey = normActKey;
 
-      let activities = JSON.parse(localStorage.getItem(activityKey) || '[]');
+      let activities = JSON.parse(
+        localStorage.getItem(normActKey) ||
+        localStorage.getItem(rawActKey) ||
+        '[]'
+      );
 
       if (askConfirm) {
         const confirmed = confirm(
@@ -3298,7 +3437,10 @@
 
       activities.sort((a, b) => (a.date || '').localeCompare(b.date || ''));
 
-      localStorage.setItem(activityKey, JSON.stringify(activities));
+      localStorage.setItem(normActKey, JSON.stringify(activities));
+      if (rawActKey !== normActKey) {
+        localStorage.setItem(rawActKey, JSON.stringify(activities));
+      }
       loadActivityList();
       const viewDash = document.getElementById('view-dashboard');
       const isDashboardActive = viewDash && viewDash.style.display !== 'none';
@@ -3327,11 +3469,19 @@
     function syncSourceToBaselineActivities(src) {
       if (!src) return;
       const username = (localStorage.getItem('gs_current_user') || 'guest').toLowerCase();
+      const rawUser = (localStorage.getItem('gs_current_user') || 'guest').trim();
+      const userSlug = rawUser.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '') || 'guest';
       const branchEl = document.getElementById('branch-selector');
       const branchName = (branchEl && branchEl.value) ? branchEl.value : 'main';
       const branchKey = branchName.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
-      const storageKey = `gs_data_${username}_${branchKey}_activity`;
-      const actList = JSON.parse(localStorage.getItem(storageKey) || '[]');
+      const normActKey = (typeof getBranchStorageKey === 'function') ? getBranchStorageKey('activity') : `gs_data_${userSlug}_${branchKey}_activity`;
+      const rawActKey = `gs_data_${username}_${branchKey}_activity`;
+      const storageKey = rawActKey;
+      const actList = JSON.parse(
+        localStorage.getItem(normActKey) ||
+        localStorage.getItem(rawActKey) ||
+        '[]'
+      );
       if (!actList || actList.length === 0) return;
 
       const curYear = (document.getElementById('act-filter-year')?.value) || new Date().getFullYear().toString();
@@ -3406,7 +3556,10 @@
       });
 
       if (updatedCount > 0) {
-        localStorage.setItem(storageKey, JSON.stringify(actList));
+        localStorage.setItem(normActKey, JSON.stringify(actList));
+        if (rawActKey !== normActKey) {
+          localStorage.setItem(rawActKey, JSON.stringify(actList));
+        }
         // Cập nhật trực tiếp lên DOM nếu bảng Dữ liệu hoạt động đang hiển thị
         const rows = document.querySelectorAll('#activity-tbody tr:not(#no-activity-row)');
         rows.forEach(tr => {
@@ -3485,11 +3638,18 @@
 
     function removeActivityDaysOff(type) {
       const username = localStorage.getItem('gs_current_user') || localStorage.getItem('gs_user') || 'guest';
+      const rawUser = username.trim();
       const branchEl = document.getElementById('branch-selector');
       const branchName = (branchEl && branchEl.value) ? branchEl.value : 'main';
       const branchKey = branchName.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
-      const activityKey = `gs_data_${username}_${branchKey}_activity`;
-      const activities = JSON.parse(localStorage.getItem(activityKey) || '[]');
+      const normActKey = getBranchStorageKey('activity');
+      const rawActKey = `gs_data_${rawUser}_${branchKey}_activity`;
+      const activityKey = normActKey;
+      const activities = JSON.parse(
+        localStorage.getItem(normActKey) ||
+        localStorage.getItem(rawActKey) ||
+        '[]'
+      );
 
       const curYear = document.getElementById('act-filter-year')?.value || new Date().getFullYear().toString();
       const curMonth = document.getElementById('act-filter-month')?.value || '';
@@ -3593,7 +3753,10 @@
 
       if (!confirm(confirmMsg)) return;
 
-      localStorage.setItem(activityKey, JSON.stringify(remaining));
+      localStorage.setItem(normActKey, JSON.stringify(remaining));
+      if (rawActKey !== normActKey) {
+        localStorage.setItem(rawActKey, JSON.stringify(remaining));
+      }
       loadActivityList();
       if (typeof renderMachineOverview === 'function') renderMachineOverview();
       if (typeof renderReconciliationSummary === 'function') renderReconciliationSummary();
@@ -3668,13 +3831,20 @@
       }
 
       const username = localStorage.getItem('gs_current_user') || 'guest';
+      const rawUser = username.trim();
+      const userSlug = rawUser.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '') || 'guest';
       const branchEl = document.getElementById('branch-selector');
       const branchName = (branchEl && branchEl.value) ? branchEl.value : 'main';
       const branchKey = branchName.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
 
       let sources = [];
       try {
-        sources = JSON.parse(localStorage.getItem(`gs_data_${username}_${branchKey}_sources`) || '[]');
+        sources = JSON.parse(
+          localStorage.getItem(getBranchStorageKey('sources')) ||
+          localStorage.getItem(`gs_data_${userSlug}_${branchKey}_sources`) ||
+          localStorage.getItem(`gs_data_${rawUser}_${branchKey}_sources`) ||
+          '[]'
+        );
       } catch(e) {}
 
       if (!Array.isArray(sources) || sources.length === 0) {
@@ -3693,7 +3863,12 @@
 
       let activities = [];
       try {
-        activities = JSON.parse(localStorage.getItem(`gs_data_${username}_${branchKey}_activity`) || '[]');
+        activities = JSON.parse(
+          localStorage.getItem(getBranchStorageKey('activity')) ||
+          localStorage.getItem(`gs_data_${userSlug}_${branchKey}_activity`) ||
+          localStorage.getItem(`gs_data_${rawUser}_${branchKey}_activity`) ||
+          '[]'
+        );
       } catch(e) {}
 
       // Kiểm tra xem nguồn phát thải công nghệ nào chưa có bản ghi sản lượng thực tế

@@ -62,6 +62,18 @@ assert.strictEqual(resSteel.total, 3400, '5000 tons steel should equal 3400 tCO2
 const resCement = calcIntensity('cement', 10000);
 assert.strictEqual(resCement.factor, 0.85, 'Cement factor should be 0.85');
 assert.strictEqual(resCement.total, 8500, '10000 tons cement should equal 8500 tCO2e');
-console.log('✓ PASS 5: Interactive Carbon Footprint calculation logic is accurate.');
+// 6. Verify removal of stats-counter, emojis, and core team members as requested
+assert(!indexHtml.includes('stats-counter'), 'index.html must not contain stats-counter (500+ SME, 2.4M tCO2e, Ready EU CBAM)');
+assert(!indexHtml.includes('⚡'), 'index.html must not contain lightning sticker (⚡)');
+assert(!indexHtml.includes('🌱'), 'index.html must not contain plant sticker (🌱)');
+assert(!indexHtml.includes('📊'), 'index.html must not contain chart sticker (📊)');
+assert(!indexHtml.includes('🇪🇺'), 'index.html must not contain EU flag sticker (🇪🇺)');
+assert(!indexHtml.includes('id="doi-ngu"'), 'index.html must not contain #doi-ngu core team section');
+assert(!indexHtml.includes('Thành viên cốt lõi'), 'index.html must not contain "Thành viên cốt lõi"');
+assert(indexHtml.includes('id="ve-chung-toi"'), 'index.html must keep "Về chúng tôi" section');
+assert(indexHtml.includes('id="tam-nhin"'), 'index.html must keep "Tầm nhìn" section');
+assert(indexHtml.includes('fc-tag'), 'Floating cards must use unified fc-tag class');
+assert(indexHtml.includes('fc-val'), 'Floating cards must use unified fc-val class with pure white text');
+console.log('✓ PASS 6: Verified removal of stats counter, emojis, team section, and unified green aesthetic.');
 
 console.log('\n🎉 ALL CHECKS PASSED: Landing page title, aesthetics, and Carbon Footprint feature 100% verified!');

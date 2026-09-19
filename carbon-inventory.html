@@ -812,16 +812,6 @@
                     <input type="number" id="ci-setup-branches" class="form-control" min="0" value="0">
                   </div>
                 </div>
-
-                <div class="form-row" style="margin-top: 1.25rem;">
-                  <div class="form-group" style="width: 100%; margin-bottom: 0;">
-                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.4rem;">
-                      <label style="margin-bottom: 0; font-weight: 600;">Mô tả tóm tắt quy trình công nghệ sản xuất của cơ sở <span style="font-weight: 400; color: var(--color-text-secondary); font-size: 0.85rem;">(Bắt buộc theo Nghị định 06/2022/NĐ-CP &amp; Thông tư 38/2023/TT-BCT)</span></label>
-                      <button type="button" id="btn-suggest-process-desc" class="btn btn-outline" style="padding: 3px 8px; font-size: 0.78rem; border-radius: 4px; display: inline-flex; align-items: center; gap: 4px; cursor: pointer;" title="Tự động điền mô tả mẫu theo ngành nghề">Gợi ý mẫu theo ngành</button>
-                    </div>
-                    <textarea id="ci-setup-desc-process" class="form-control" rows="3" placeholder="Mô tả tóm tắt các công đoạn công nghệ chính: Tiếp nhận nguyên liệu -> Luyện / Phản ứng -> Tạo hình / Hoàn thiện -> Hệ thống xử lý môi trường &amp; thu hồi..."></textarea>
-                  </div>
-                </div>
               </div>
 
               <!-- CARD 4: Danh sách Cơ sở / Chi nhánh (Hiện động) -->
@@ -2371,8 +2361,8 @@
       }
 
       // Reset dropdown nguồn phát thải về "-- Tất cả Nguồn --" để không bị đơ hoặc kẹt bộ lọc cũ
-      const actHiddenFilter = document.getElementById('act-filter-source-hidden');
-      const actFilterInput = document.getElementById('act-filter-source');
+      const actHiddenFilter = document.getElementById('activity-source-filter') || document.getElementById('act-filter-source-hidden');
+      const actFilterInput = document.getElementById('activity-custom-filter-input') || document.getElementById('act-filter-source');
       if (actHiddenFilter) actHiddenFilter.value = '';
       if (actFilterInput) actFilterInput.innerText = '-- Tất cả Nguồn --';
       if (typeof window.applyFilter === 'function') {
@@ -2670,12 +2660,12 @@
       const slugKey = `gs_data_${userSlug}_${branchKey}_${suffix}`;
 
       if (typeof localStorage !== 'undefined') {
-        const rawVal = localStorage.getItem(rawKey);
-        if (rawVal && rawVal !== '[]' && rawVal !== '{}') return rawKey;
         const slugVal = localStorage.getItem(slugKey);
         if (slugVal && slugVal !== '[]' && slugVal !== '{}') return slugKey;
+        const rawVal = localStorage.getItem(rawKey);
+        if (rawVal && rawVal !== '[]' && rawVal !== '{}') return rawKey;
       }
-      return rawKey;
+      return slugKey;
     }
 
     // --- EQUIPMENT PERSISTENCE ---
@@ -3480,10 +3470,10 @@
     ];
 
     // ============================================
-    // TỰ ĐỘNG KHỞI TẠO DỮ LIỆU MẪU NHÀ MÁY THÉP HÒA BÌNH 2026
-    // (Đảm bảo tất cả vai trò Kỹ sư, Kế toán, Giám đốc luôn sẵn sàng số liệu kiểm thử)
+    // TỰ ĐỘNG KHỞI TẠO DỮ LIỆU MẪU THEO NGÀNH NGHỀ (ĐA NGÀNH NGHỀ CHUẨN 2026)
+    // (Tự động thích ứng theo Da giày, Dệt may, Xi măng, Sắt Thép, Nhôm...)
     // ============================================
-    window.seedSteelPlantSampleData = function(force = false) {
+    window.seedIndustrySampleData = function(force = false, targetIndustry = null) {
       const rawUser = (localStorage.getItem('gs_current_user') || 'guest').trim();
       const userSlug = rawUser.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '') || 'guest';
       const branchEl = document.getElementById('branch-selector');
@@ -3495,6 +3485,9 @@
       const rawEqKey = `gs_data_${rawUser}_${branchKey}_equipment`;
       const rawSrcKey = `gs_data_${rawUser}_${branchKey}_sources`;
       const rawActKey = `gs_data_${rawUser}_${branchKey}_activity`;
+      const slugEqKey = `gs_data_${userSlug}_${branchKey}_equipment`;
+      const slugSrcKey = `gs_data_${userSlug}_${branchKey}_sources`;
+      const slugActKey = `gs_data_${userSlug}_${branchKey}_activity`;
 
       const curEq = localStorage.getItem(keyEq) || localStorage.getItem(rawEqKey);
       const curSrc = localStorage.getItem(keySrc) || localStorage.getItem(rawSrcKey);
@@ -3504,15 +3497,123 @@
         return false;
       }
 
+      let industry = targetIndustry;
+      if (!industry) {
+        const indSelect = document.getElementById('ci-setup-industry') || document.getElementById('setup-industry');
+        if (indSelect && indSelect.value) industry = indSelect.value.trim();
+      }
+      if (!industry) {
+        try {
+          const comp = JSON.parse(localStorage.getItem('gs_v2_company') || '{}');
+          if (comp.industry) industry = comp.industry;
+        } catch(e) {}
+      }
+      if (!industry) industry = 'Sắt Thép';
+
+      const isSteel = (!industry || industry === 'Sắt Thép' || industry.toLowerCase().includes('thép'));
+
+      let templateRows = [];
+      if (typeof window.getIndustryEquipments === 'function') {
+        const eqs = window.getIndustryEquipments(industry);
+        if (eqs && eqs.length > 0) {
+          templateRows = eqs.map((eq, idx) => {
+            let fuelName = 'Điện lưới Việt Nam';
+            let catName = 'Tiêu thụ điện';
+            let ratedCap = eq.ratedCapacity || 45;
+            let capUnit = eq.capacityUnit || 'kW';
+            let hoursDay = 16;
+            let daysWeek = 6;
+            let measureMethod = 'Tự đánh giá';
+
+            if (eq.energyType === 'DIESEL') {
+              fuelName = 'Dầu Diesel (DO)';
+              catName = (eq.code && eq.code.includes('FORKLIFT')) ? 'Đốt cháy động' : 'Đốt cháy cố định';
+              if (eq.code && eq.code.includes('GENSET')) { hoursDay = 2; daysWeek = 1; measureMethod = 'Tự đánh giá / Chạy thử máy'; }
+              else if (eq.code && eq.code.includes('FIRE-PUMP')) { hoursDay = 1; daysWeek = 1; measureMethod = 'Chạy thử PCCC'; }
+            } else if (eq.energyType === 'FUEL_OIL') {
+              fuelName = 'Dầu nặng FO (Fuel Oil)';
+              catName = 'Đốt cháy cố định';
+            } else if (eq.energyType === 'COAL') {
+              fuelName = 'Than mỡ (Bituminous coal)';
+              catName = 'Đốt cháy cố định';
+            } else if (eq.energyType === 'LPG') {
+              fuelName = 'Khí hóa lỏng (LPG)';
+              catName = 'Đốt cháy cố định';
+              if (eq.code && eq.code.includes('CANTEEN')) { hoursDay = 8; daysWeek = 6; measureMethod = 'Hóa đơn xuất kho bình gas'; }
+            } else if (eq.energyType === 'NATURAL_GAS') {
+              fuelName = 'Khí tự nhiên (NG)';
+              catName = 'Đốt cháy cố định';
+            } else if (eq.energyType === 'BIOMASS') {
+              fuelName = 'Sinh khối / Củi vụn / Mùn cưa';
+              catName = 'Đốt cháy cố định';
+            } else if (eq.energyType === 'REFRIGERANT') {
+              fuelName = 'R-410A';
+              catName = 'Phát thải rò rỉ';
+              ratedCap = 120;
+              capUnit = 'kg nạp';
+              hoursDay = 24;
+              daysWeek = 7;
+              measureMethod = 'Nhật ký bảo trì & nạp gas lạnh';
+            } else if (eq.energyType === 'CO2_GAS') {
+              fuelName = 'Khí CO2';
+              catName = 'Phát thải rò rỉ';
+              ratedCap = 45;
+              capUnit = 'kg CO2';
+              hoursDay = 24;
+              daysWeek = 7;
+              measureMethod = 'Kiểm định bình PCCC định kỳ';
+            } else if (eq.energyType === 'WASTEWATER') {
+              fuelName = 'Nước thải sinh hoạt';
+              catName = 'Xử lý chất thải / Nước thải';
+              ratedCap = 50;
+              capUnit = 'm3/ngày';
+              hoursDay = 24;
+              daysWeek = 7;
+              measureMethod = 'Quan trắc lưu lượng nước thải';
+            } else if (eq.energyType === 'ELECTRICITY') {
+              fuelName = 'Điện lưới Việt Nam';
+              catName = 'Tiêu thụ điện';
+              if (eq.code && eq.code.includes('SERVER')) {
+                hoursDay = 24;
+                daysWeek = 7;
+                measureMethod = 'Đồng hồ điện PDU phòng máy chủ';
+              }
+            }
+
+            return {
+              "Loại thiết bị": eq.name,
+              "Tên thiết bị": eq.name + (eq.isCommon ? ' (Dùng chung toàn nhà máy)' : ''),
+              "Số tài sản": eq.code || `EQ-${idx+1}`,
+              "Vị trí": eq.isCommon ? 'Khu phụ trợ & Đời sống' : (eq.stage || 'Phân xưởng sản xuất'),
+              "Thương hiệu / Mẫu mã": (typeof window.getEquipmentBrandModel === 'function' ? window.getEquipmentBrandModel(eq) : (eq.brandModel || 'Tiêu chuẩn kỹ thuật')),
+              "Nguồn phát thải": catName,
+              "Loại năng lượng sử dụng (Điện / Nhiên liệu đốt)": fuelName,
+              "Công suất định mức": ratedCap,
+              "Đơn vị công suất": capUnit,
+              "Mức tải TB (%)": Math.round((eq.defaultLoadFactor || 0.8) * 100),
+              "Giờ làm việc bình thường (h/ngày)": hoursDay,
+              "Số ngày chạy/tuần": daysWeek,
+              "Độ tin cậy của dữ liệu": "Thứ cấp (Ước tính kỹ thuật)",
+              "Phương pháp đo lường": measureMethod,
+              "Mã đồng hồ đo": (eq.code && eq.code.includes('SERVER')) ? 'MTR-SRV-01' : ((eq.code && eq.code.includes('COMP')) ? 'MTR-COMP-01' : '')
+            };
+          });
+        }
+      }
+
+      if (!templateRows || templateRows.length === 0) {
+        templateRows = sampleEquipmentTemplateData;
+      }
+
       const eqList = [];
       const srcList = [];
       const todayStr = '2026-01-15';
 
-      sampleEquipmentTemplateData.forEach((r, idx) => {
+      templateRows.forEach((r, idx) => {
         const type = (r['Loại thiết bị'] || '').trim();
         const name = (r['Tên thiết bị'] || '').trim();
         const location = (r['Vị trí'] || '').trim();
-        const asset = (r['Số tài sản'] || `STEEL-${idx+1}`).trim();
+        const asset = (r['Số tài sản'] || `EQ-${idx+1}`).trim();
         const brand = (r['Thương hiệu / Mẫu mã'] || '').trim();
         const cat = (r['Nguồn phát thải'] || 'Tiêu thụ điện').trim();
         const cap = parseFloat(r['Công suất định mức']) || 100;
@@ -3537,8 +3638,23 @@
         const isElectric = cat.includes('điện') || cat.includes('Điện');
         const isFuel = cat.includes('Đốt cháy cố định');
         const isForklift = cat.includes('Đốt cháy động');
-        const efFactor = isElectric ? '0.6766' : (isFuel ? '3.151' : (isForklift ? '2.68' : '0.6766'));
-        const efUnit = isElectric ? 'kgCO2e/kWh' : (isFuel ? 'kgCO2e/kg' : 'kgCO2e/lít');
+        const isLeakage = cat.includes('rò rỉ');
+        const isWaste = cat.includes('nước thải') || cat.includes('chất thải');
+        
+        let efFactor = isElectric ? '0.6766' : (isFuel ? '3.151' : (isForklift ? '2.68' : '0.6766'));
+        let efUnit = isElectric ? 'kgCO2e/kWh' : (isFuel ? 'kgCO2e/kg' : (isForklift ? 'kgCO2e/lít' : 'kgCO2e/kWh'));
+        let fuelLabel = isElectric ? 'Điện lưới Việt Nam 2022' : (isFuel ? (r['Loại năng lượng sử dụng (Điện / Nhiên liệu đốt)'] || 'Dầu Diesel (DO)') : 'Dầu Diesel (DO)');
+
+        if (isLeakage) {
+          efFactor = '2088';
+          efUnit = 'kgCO2e/kg';
+          fuelLabel = 'Môi chất lạnh R-410A';
+        } else if (isWaste) {
+          efFactor = '0.42';
+          efUnit = 'kgCO2e/m3';
+          fuelLabel = 'Nước thải sinh hoạt';
+        }
+
         const hourlyRate = (cap * (load / 100)).toFixed(2);
         const annualEstQty = Math.round(hourlyRate * hoursDay * daysWeek * 52);
         const annualEstEmissions = Math.round((annualEstQty * parseFloat(efFactor)) / 1000);
@@ -3550,7 +3666,7 @@
           name: `${cat} - ${name}`,
           eq: name,
           eqAsset: asset,
-          ef: isElectric ? 'Điện lưới Việt Nam 2022' : (isFuel ? 'Dầu nặng FO (Fuel Oil)' : 'Dầu Diesel (DO)'),
+          ef: fuelLabel,
           efFactor: efFactor,
           efUnit: efUnit,
           measure: measure,
@@ -3572,163 +3688,375 @@
           createdAt: todayStr,
           updatedAt: todayStr
         });
-
-        if (asset.includes('EAF') || name.includes('EAF')) {
-          srcList.push({
-            id: 'src_ippu_eaf',
-            category: 'Các quá trình công nghiệp',
-            type: 'Lò thổi oxy hoặc lò hồ quang điện trong luyện thép',
-            name: 'Quá trình luyện thép - Lò hồ quang điện EAF 100 tấn/mẻ',
-            eq: name,
-            eqAsset: `${asset}-IPPU`,
-            ef: 'Thép lò hồ quang điện (EAF)',
-            efFactor: '60',
-            efUnit: 'kgCO2/tấn',
-            measure: 'Theo sản lượng sản phẩm',
-            capacity: '100',
-            opCapacity: '100',
-            capUnit: 'tấn/mẻ',
-            opCapUnit: 'tấn/mẻ',
-            load: '82',
-            opLoad: '82',
-            hoursDay: '16',
-            opHoursDay: '16',
-            daysWeek: '6',
-            opDaysWeek: '6',
-            hourlyRate: '125',
-            annualEstQty: 60000,
-            annualEstEmissions: 3600,
-            isProcessEmission: 'true',
-            productName: 'Thép thô / Phôi thép',
-            productionUnit: 'tấn',
-            createdAt: todayStr,
-            updatedAt: todayStr
-          });
-        }
       });
+
+      // Bổ sung nguồn phát thải Quá trình công nghệ (IPPU) đặc thù theo ngành nghề
+      let ippuSourceId = null;
+      let ippuSourceName = '';
+      let ippuProduct = 'sản phẩm';
+      let ippuUnit = 'tấn';
+      let ippuFactor = '60';
+
+      if (isSteel) {
+        ippuSourceId = 'src_ippu_eaf';
+        ippuSourceName = 'Quá trình luyện thép - Lò hồ quang điện EAF 100 tấn/mẻ';
+        ippuProduct = 'Thép thô / Phôi thép';
+        ippuUnit = 'tấn';
+        ippuFactor = '60';
+        srcList.push({
+          id: ippuSourceId,
+          category: 'Các quá trình công nghiệp',
+          type: 'Lò thổi oxy hoặc lò hồ quang điện trong luyện thép',
+          name: ippuSourceName,
+          eq: 'Lò hồ quang điện EAF 100 tấn/mẻ',
+          eqAsset: 'STEEL-EAF-01-IPPU',
+          ef: 'Thép lò hồ quang điện (EAF)',
+          efFactor: ippuFactor,
+          efUnit: 'kgCO2/tấn',
+          measure: 'Theo sản lượng sản phẩm',
+          capacity: '100',
+          opCapacity: '100',
+          capUnit: 'tấn/mẻ',
+          opCapUnit: 'tấn/mẻ',
+          load: '82',
+          opLoad: '82',
+          hoursDay: '16',
+          opHoursDay: '16',
+          daysWeek: '6',
+          opDaysWeek: '6',
+          hourlyRate: '125',
+          annualEstQty: 60000,
+          annualEstEmissions: 3600,
+          isProcessEmission: 'true',
+          productName: ippuProduct,
+          productionUnit: ippuUnit,
+          createdAt: todayStr,
+          updatedAt: todayStr
+        });
+      } else if (industry.toLowerCase().includes('giày')) {
+        ippuSourceId = 'src_ippu_footwear';
+        ippuSourceName = 'Quá trình hoàn tất dán đế giày (Bay hơi keo dán VOCs)';
+        ippuProduct = 'Đôi giày hoàn tất';
+        ippuUnit = 'đôi';
+        ippuFactor = '0.85';
+        srcList.push({
+          id: ippuSourceId,
+          category: 'Các quá trình công nghiệp',
+          type: 'Quá trình bay hơi keo dung môi dán đế giày',
+          name: ippuSourceName,
+          eq: 'Buồng sấy keo dán đế và quét keo hoàn tất giày (VOCs)',
+          eqAsset: 'SHOE-GLUE-DRY-IPPU',
+          ef: 'Keo dán PU/EVA dung môi',
+          efFactor: ippuFactor,
+          efUnit: 'kgCO2e/đôi',
+          measure: 'Theo sản lượng sản phẩm',
+          capacity: '5000',
+          opCapacity: '5000',
+          capUnit: 'đôi/ngày',
+          opCapUnit: 'đôi/ngày',
+          load: '85',
+          opLoad: '85',
+          hoursDay: '16',
+          opHoursDay: '16',
+          daysWeek: '6',
+          opDaysWeek: '6',
+          hourlyRate: '310',
+          annualEstQty: 1500000,
+          annualEstEmissions: 1275,
+          isProcessEmission: 'true',
+          productName: ippuProduct,
+          productionUnit: ippuUnit,
+          createdAt: todayStr,
+          updatedAt: todayStr
+        });
+      } else if (industry.toLowerCase().includes('may') || industry.toLowerCase().includes('dệt')) {
+        ippuSourceId = 'src_ippu_textile';
+        ippuSourceName = 'Quá trình nhuộm & định hình hoàn tất vải dệt';
+        ippuProduct = 'Vải hoàn tất';
+        ippuUnit = 'mét';
+        ippuFactor = '0.45';
+        srcList.push({
+          id: ippuSourceId,
+          category: 'Các quá trình công nghiệp',
+          type: 'Quá trình xử lý nhiệt & hóa chất nhuộm hoàn tất vải',
+          name: ippuSourceName,
+          eq: 'Máy định hình nhiệt vải căng kim (Stenter Frame Dryer)',
+          eqAsset: 'TEX-STENTER-IPPU',
+          ef: 'Hóa chất trợ nhuộm',
+          efFactor: ippuFactor,
+          efUnit: 'kgCO2e/mét',
+          measure: 'Theo sản lượng sản phẩm',
+          capacity: '8000',
+          opCapacity: '8000',
+          capUnit: 'mét/ngày',
+          opCapUnit: 'mét/ngày',
+          load: '80',
+          opLoad: '80',
+          hoursDay: '16',
+          opHoursDay: '16',
+          daysWeek: '6',
+          opDaysWeek: '6',
+          hourlyRate: '500',
+          annualEstQty: 2500000,
+          annualEstEmissions: 1125,
+          isProcessEmission: 'true',
+          productName: ippuProduct,
+          productionUnit: ippuUnit,
+          createdAt: todayStr,
+          updatedAt: todayStr
+        });
+      } else if (industry.toLowerCase().includes('măng')) {
+        ippuSourceId = 'src_ippu_cement';
+        ippuSourceName = 'Nung luyện Clanhke xi măng (Phân giải CaCO3)';
+        ippuProduct = 'Clanhke xi măng';
+        ippuUnit = 'tấn';
+        ippuFactor = '525';
+        srcList.push({
+          id: ippuSourceId,
+          category: 'Các quá trình công nghiệp',
+          type: 'Phân giải canxit (CaCO3) trong lò nung Clanhke',
+          name: ippuSourceName,
+          eq: 'Lò quay Clanhke phương pháp khô',
+          eqAsset: 'CEM-KILN-01-IPPU',
+          ef: 'Phân giải đá vôi nung Clanhke',
+          efFactor: ippuFactor,
+          efUnit: 'kgCO2/tấn',
+          measure: 'Theo sản lượng sản phẩm',
+          capacity: '2500',
+          opCapacity: '2500',
+          capUnit: 'tấn/ngày',
+          opCapUnit: 'tấn/ngày',
+          load: '90',
+          opLoad: '90',
+          hoursDay: '24',
+          opHoursDay: '24',
+          daysWeek: '7',
+          opDaysWeek: '7',
+          hourlyRate: '104',
+          annualEstQty: 800000,
+          annualEstEmissions: 420000,
+          isProcessEmission: 'true',
+          productName: ippuProduct,
+          productionUnit: ippuUnit,
+          createdAt: todayStr,
+          updatedAt: todayStr
+        });
+      } else if (industry.toLowerCase().includes('nhôm')) {
+        ippuSourceId = 'src_ippu_alu';
+        ippuSourceName = 'Quá trình điện phân nhôm Hall-Héroult';
+        ippuProduct = 'Nhôm thỏi 99.7%';
+        ippuUnit = 'tấn';
+        ippuFactor = '1600';
+        srcList.push({
+          id: ippuSourceId,
+          category: 'Các quá trình công nghiệp',
+          type: 'Điện phân nhôm nóng chảy (Tiêu hao điện cực Anode)',
+          name: ippuSourceName,
+          eq: 'Dãy bể điện phân Hall-Héroult',
+          eqAsset: 'ALU-POT-HALL-IPPU',
+          ef: 'Tiêu hao Anode carbon',
+          efFactor: ippuFactor,
+          efUnit: 'kgCO2/tấn',
+          measure: 'Theo sản lượng sản phẩm',
+          capacity: '150',
+          opCapacity: '150',
+          capUnit: 'tấn/ngày',
+          opCapUnit: 'tấn/ngày',
+          load: '95',
+          opLoad: '95',
+          hoursDay: '24',
+          opHoursDay: '24',
+          daysWeek: '7',
+          opDaysWeek: '7',
+          hourlyRate: '6.25',
+          annualEstQty: 50000,
+          annualEstEmissions: 80000,
+          isProcessEmission: 'true',
+          productName: ippuProduct,
+          productionUnit: ippuUnit,
+          createdAt: todayStr,
+          updatedAt: todayStr
+        });
+      }
 
       localStorage.setItem(keyEq, JSON.stringify(eqList));
       localStorage.setItem(keySrc, JSON.stringify(srcList));
-      if (rawEqKey !== keyEq) {
+      localStorage.setItem(slugEqKey, JSON.stringify(eqList));
+      localStorage.setItem(slugSrcKey, JSON.stringify(srcList));
+      if (rawEqKey !== slugEqKey) {
         localStorage.setItem(rawEqKey, JSON.stringify(eqList));
         localStorage.setItem(rawSrcKey, JSON.stringify(srcList));
       }
 
-      // Dữ liệu hoạt động 2026: Ca máy kỹ thuật + Hóa đơn kế toán hàng tháng
+      // Tìm nguồn điện chính và nguồn nhiên liệu chính để tạo nhật ký ca máy & hóa đơn đối soát
+      const elecSrc = srcList.find(s => s.category.includes('điện') || s.category.includes('Điện')) || srcList[0];
+      const fuelSrc = srcList.find(s => s.category.includes('Đốt cháy cố định')) || srcList.find(s => s.id !== elecSrc?.id);
+      const ippuSrc = srcList.find(s => s.isProcessEmission === 'true');
+
       const activities = [];
       for (let m = 1; m <= 12; m++) {
         const mStr = String(m).padStart(2, '0');
-        
-        // Bản ghi vận hành kỹ thuật (ca máy đại diện)
+
+        // Bản ghi vận hành kỹ thuật (ca máy đại diện ngày 5, 12, 18, 24)
         [5, 12, 18, 24].forEach(day => {
           const dStr = String(day).padStart(2, '0');
           const dateStr = `2026-${mStr}-${dStr}`;
 
+          if (elecSrc) {
+            const hRate = parseFloat(elecSrc.hourlyRate) || 120;
+            const dayAmt = Math.round(hRate * (parseFloat(elecSrc.hoursDay) || 16));
+            const ef = parseFloat(elecSrc.efFactor) || 0.6766;
+            activities.push({
+              id: `act_eng_${m}_${day}_elec`,
+              date: dateStr,
+              sourceId: elecSrc.id,
+              sourceName: elecSrc.name,
+              sourceType: elecSrc.type || 'Tiêu thụ điện',
+              amount: String(dayAmt),
+              unit: elecSrc.capUnit === 'kW' ? 'kWh' : elecSrc.capUnit,
+              finalFactor: String(ef),
+              co2e: (dayAmt * ef).toFixed(2),
+              doc: `Nhật ký ca 1 - 2 vận hành ${elecSrc.eq || elecSrc.name}`,
+              manager: 'Kỹ sư Trần Văn Hùng',
+              entryRole: 'engineer',
+              isInvoice: 'false',
+              entryMode: 'hours',
+              status: 'VERIFIED',
+              isBaseline: 'true'
+            });
+          }
+
+          if (ippuSrc) {
+            const ippuAmt = isSteel ? '200' : (industry.includes('giày') ? '4500' : (industry.includes('may') ? '7200' : '2000'));
+            const fFactor = parseFloat(ippuSrc.efFactor) || 60;
+            activities.push({
+              id: `act_eng_${m}_${day}_ippu`,
+              date: dateStr,
+              sourceId: ippuSrc.id,
+              sourceName: ippuSrc.name,
+              sourceType: ippuSrc.type || 'Các quá trình công nghiệp',
+              amount: String(ippuAmt),
+              unit: ippuSrc.productionUnit || 'tấn',
+              finalFactor: String(fFactor),
+              co2e: (parseFloat(ippuAmt) * fFactor).toFixed(2),
+              doc: `Phiếu giao nhận ${ippuSrc.productName || 'thành phẩm'} xưởng sản xuất`,
+              manager: 'Kỹ sư Trần Văn Hùng',
+              entryRole: 'engineer',
+              isInvoice: 'false',
+              entryMode: 'direct',
+              status: 'VERIFIED',
+              isProcessEmission: 'true'
+            });
+          }
+
+          if (fuelSrc && fuelSrc.id !== elecSrc?.id) {
+            const fRate = parseFloat(fuelSrc.hourlyRate) || 30;
+            const fAmt = Math.round(fRate * (parseFloat(fuelSrc.hoursDay) || 8));
+            const fFactor = parseFloat(fuelSrc.efFactor) || 3.151;
+            activities.push({
+              id: `act_eng_${m}_${day}_fuel`,
+              date: dateStr,
+              sourceId: fuelSrc.id,
+              sourceName: fuelSrc.name,
+              sourceType: fuelSrc.type || 'Đốt cháy cố định',
+              amount: String(fAmt),
+              unit: fuelSrc.capUnit || 'kg',
+              finalFactor: String(fFactor),
+              co2e: (fAmt * fFactor).toFixed(2),
+              doc: `Nhật ký vận hành & cấp nhiên liệu ${fuelSrc.eq || fuelSrc.name}`,
+              manager: 'Kỹ sư Lê Hoàng Nam',
+              entryRole: 'engineer',
+              isInvoice: 'false',
+              entryMode: 'hours',
+              status: 'VERIFIED'
+            });
+          }
+        });
+
+        // Hóa đơn kế toán hàng tháng chính thức (HĐ EVN điện lực & HĐ Nhiên liệu NCC)
+        if (elecSrc) {
+          const mElecAmt = isSteel ? 3150000 : (industry.includes('giày') ? 350000 : (industry.includes('may') ? 420000 : 2500000));
+          const ef = parseFloat(elecSrc.efFactor) || 0.6766;
           activities.push({
-            id: `act_eng_${m}_${day}_eaf`,
-            date: dateStr,
-            sourceId: 'src_seed_1',
-            sourceName: 'Tiêu thụ điện - Lò hồ quang điện EAF 100 tấn/mẻ',
-            sourceType: 'Tiêu thụ điện',
-            amount: '590400',
+            id: `act_acc_${m}_evn`,
+            date: `2026-${mStr}-28`,
+            sourceId: elecSrc.id,
+            sourceName: elecSrc.name,
+            sourceType: elecSrc.type || 'Tiêu thụ điện',
+            amount: String(mElecAmt),
             unit: 'kWh',
-            finalFactor: '0.6766',
-            co2e: '399464.64',
-            doc: 'Nhật ký ca 1 - 2 vận hành Lò EAF',
-            manager: 'Kỹ sư Trần Văn Hùng',
-            entryRole: 'engineer',
-            isInvoice: 'false',
-            entryMode: 'hours',
-            status: 'VERIFIED',
-            isBaseline: 'true'
-          });
-
-          activities.push({
-            id: `act_eng_${m}_${day}_ippu`,
-            date: dateStr,
-            sourceId: 'src_ippu_eaf',
-            sourceName: 'Quá trình luyện thép - Lò hồ quang điện EAF 100 tấn/mẻ',
-            sourceType: 'Các quá trình công nghiệp',
-            amount: '200',
-            unit: 'tấn',
-            finalFactor: '60',
-            co2e: '12000.00',
-            doc: 'Phiếu giao nhận phôi thép xưởng đúc',
-            manager: 'Kỹ sư Trần Văn Hùng',
-            entryRole: 'engineer',
-            isInvoice: 'false',
+            finalFactor: String(ef),
+            co2e: (mElecAmt * ef).toFixed(2),
+            doc: `HĐ-EVN-2026-${mStr} - Điện lực địa phương`,
+            manager: 'Kế toán trưởng Nguyễn Thị Mai',
+            entryRole: 'accountant',
+            isInvoice: 'true',
             entryMode: 'direct',
-            status: 'VERIFIED',
-            isProcessEmission: 'true'
+            status: 'CONFIRMED'
           });
+        }
 
+        if (fuelSrc && fuelSrc.id !== elecSrc?.id) {
+          const mFuelAmt = isSteel ? 75000 : (industry.includes('giày') ? 12000 : (industry.includes('may') ? 28000 : 85000));
+          const fFactor = parseFloat(fuelSrc.efFactor) || 3.151;
           activities.push({
-            id: `act_eng_${m}_${day}_fo`,
-            date: dateStr,
-            sourceId: 'src_seed_4',
-            sourceName: 'Đốt cháy cố định - Lò nung lại phôi cán nóng (Đốt dầu FO)',
-            sourceType: 'Đốt cháy cố định',
-            amount: '15000',
-            unit: 'kg',
-            finalFactor: '3.151',
-            co2e: '47265.00',
-            doc: 'Nhật ký cấp dầu FO lò nung',
-            manager: 'Kỹ sư Lê Hoàng Nam',
-            entryRole: 'engineer',
-            isInvoice: 'false',
-            entryMode: 'hours',
-            status: 'VERIFIED'
+            id: `act_acc_${m}_fuel`,
+            date: `2026-${mStr}-25`,
+            sourceId: fuelSrc.id,
+            sourceName: fuelSrc.name,
+            sourceType: fuelSrc.type || 'Đốt cháy cố định',
+            amount: String(mFuelAmt),
+            unit: fuelSrc.capUnit || 'kg',
+            finalFactor: String(fFactor),
+            co2e: (mFuelAmt * fFactor).toFixed(2),
+            doc: `HĐ-0098${mStr} - Công ty Xăng dầu Petrolimex`,
+            manager: 'Kế toán kho Phạm Văn Bình',
+            entryRole: 'accountant',
+            isInvoice: 'true',
+            entryMode: 'direct',
+            status: 'CONFIRMED'
           });
-        });
+        }
+      }
 
-        // Hóa đơn thanh toán kế toán chính thức (EVN + Petrolimex hàng tháng)
-        activities.push({
-          id: `act_acc_${m}_evn`,
-          date: `2026-${mStr}-28`,
-          sourceId: 'src_seed_1',
-          sourceName: 'Tiêu thụ điện - Lò hồ quang điện EAF 100 tấn/mẻ',
-          sourceType: 'Tiêu thụ điện',
-          amount: '3150000',
-          unit: 'kWh',
-          finalFactor: '0.6766',
-          co2e: '2131290.00',
-          doc: `HĐ-EVN-2026-${mStr} - Điện lực Bà Rịa Vũng Tàu`,
-          manager: 'Kế toán trưởng Nguyễn Thị Mai',
-          entryRole: 'accountant',
-          isInvoice: 'true',
-          entryMode: 'direct',
-          status: 'CONFIRMED'
-        });
-
-        activities.push({
-          id: `act_acc_${m}_petrolimex`,
-          date: `2026-${mStr}-25`,
-          sourceId: 'src_seed_4',
-          sourceName: 'Đốt cháy cố định - Lò nung lại phôi cán nóng (Đốt dầu FO)',
-          sourceType: 'Đốt cháy cố định',
-          amount: '75000',
-          unit: 'kg',
-          finalFactor: '3.151',
-          co2e: '236325.00',
-          doc: `HĐ-0098${mStr} - Công ty Xăng dầu Petrolimex`,
-          manager: 'Kế toán kho Phạm Văn Bình',
-          entryRole: 'accountant',
-          isInvoice: 'true',
-          entryMode: 'direct',
-          status: 'CONFIRMED'
-        });
+      if (typeof window.autoGenerateDailyOperationalRecords === 'function') {
+        try {
+          window.autoGenerateDailyOperationalRecords('2026', 'all', false);
+          let generatedActs = JSON.parse(
+            localStorage.getItem(slugActKey) ||
+            localStorage.getItem(rawActKey) ||
+            localStorage.getItem(keyAct) ||
+            '[]'
+          );
+          // Gộp các hóa đơn đối soát kế toán nếu chưa có
+          const invoiceActs = activities.filter(a => a.isInvoice === 'true');
+          invoiceActs.forEach(inv => {
+            if (!generatedActs.some(g => g.id === inv.id || (g.isInvoice === 'true' && g.date === inv.date && g.sourceId === inv.sourceId))) {
+              generatedActs.push(inv);
+            }
+          });
+          generatedActs.sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+          activities = generatedActs;
+        } catch (e) {
+          console.warn('seed autoGenerateDaily notice:', e);
+        }
       }
 
       localStorage.setItem(keyAct, JSON.stringify(activities));
-      if (rawActKey !== keyAct) {
+      localStorage.setItem(slugActKey, JSON.stringify(activities));
+      if (rawActKey !== slugActKey) {
         localStorage.setItem(rawActKey, JSON.stringify(activities));
       }
       return true;
     };
 
+    window.seedSteelPlantSampleData = function(force = false) {
+      return window.seedIndustrySampleData(force, 'Sắt Thép');
+    };
+
     window.checkAndSeedSampleData = function(force = false) {
       if (!force) return false;
-      return window.seedSteelPlantSampleData(true);
+      return window.seedIndustrySampleData(true);
     };
 
     // Tự động kiểm tra và nạp ngay dữ liệu kiểm thử nếu chưa có
@@ -3871,7 +4199,7 @@
               "Tên thiết bị": eq.name + (eq.isCommon ? ' (Dùng chung toàn nhà máy)' : ''),
               "Số tài sản": eq.code,
               "Vị trí": eq.isCommon ? 'Khu phụ trợ & Đời sống' : (eq.stage || 'Phân xưởng sản xuất'),
-              "Thương hiệu / Mẫu mã": eq.description || 'Tiêu chuẩn kỹ thuật',
+              "Thương hiệu / Mẫu mã": (typeof window.getEquipmentBrandModel === 'function' ? window.getEquipmentBrandModel(eq) : (eq.brandModel || 'Tiêu chuẩn kỹ thuật')),
               "Nguồn phát thải": catName,
               "Loại năng lượng sử dụng (Điện / Nhiên liệu đốt)": fuelName,
               "Công suất định mức": ratedCap,
@@ -3934,8 +4262,6 @@
     }
 
     function updateEquipmentTemplateButtonLabel(industry) {
-      const btn = document.getElementById('btn-download-eq-template');
-      if (!btn) return;
       let ind = industry;
       if (!ind) {
         const indSelect = document.getElementById('ci-setup-industry') || document.getElementById('setup-industry');
@@ -3948,8 +4274,18 @@
         } catch(e) {}
       }
       if (!ind) ind = 'Sắt Thép';
-      btn.innerText = `Tải file mẫu (${ind})`;
-      btn.title = `Tải file Excel mẫu danh mục thiết bị cho ngành ${ind}`;
+
+      const btn = document.getElementById('btn-download-eq-template');
+      if (btn) {
+        btn.innerText = `Tải file mẫu (${ind})`;
+        btn.title = `Tải file Excel mẫu danh mục thiết bị cho ngành ${ind}`;
+      }
+
+      const seedBtn = document.getElementById('btn-seed-sample-quick');
+      if (seedBtn) {
+        seedBtn.innerHTML = `<span>Nạp mẫu chuẩn (${ind})</span>`;
+        seedBtn.title = `Nạp nhanh toàn bộ dữ liệu mẫu ngành ${ind} 2026 (Thiết bị, Nguồn, Nhật ký ca kíp & Hóa đơn)`;
+      }
     }
     window.updateEquipmentTemplateButtonLabel = updateEquipmentTemplateButtonLabel;
 
@@ -3985,23 +4321,37 @@
     const btnSeedSampleQuick = document.getElementById('btn-seed-sample-quick');
     if (btnSeedSampleQuick) {
       btnSeedSampleQuick.addEventListener('click', () => {
-        if (typeof window.seedSteelPlantSampleData === 'function') {
-          window.seedSteelPlantSampleData(true);
-          if (typeof loadEquipmentList === 'function') loadEquipmentList();
-          if (typeof loadSourceList === 'function') loadSourceList();
-          if (typeof window.loadActivityList === 'function') window.loadActivityList();
-          if (typeof window.renderMachineOverview === 'function') window.renderMachineOverview();
-          if (typeof window.renderReconciliationSummary === 'function') window.renderReconciliationSummary();
-          if (typeof renderDashboard === 'function') renderDashboard();
-          if (typeof updateDashboard === 'function') updateDashboard();
-          if (typeof window.applyFilter === 'function') window.applyFilter();
-
-          const toast = document.createElement('div');
-          toast.textContent = '🎉 Đã nạp thành công bộ dữ liệu mẫu chuẩn Nhà máy thép Hòa Bình 2026 (Thiết bị, Nguồn phát thải, 12 tháng hoạt động & Hóa đơn đối soát)!';
-          toast.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#1a7f4b;color:#fff;padding:12px 24px;border-radius:8px;font-size:0.85rem;z-index:99999;box-shadow:0 4px 16px rgba(0,0,0,0.2);max-width:90%;text-align:center;line-height:1.4;';
-          document.body.appendChild(toast);
-          setTimeout(() => toast.remove(), 4000);
+        let ind = null;
+        const indSelect = document.getElementById('ci-setup-industry') || document.getElementById('setup-industry');
+        if (indSelect && indSelect.value) ind = indSelect.value.trim();
+        if (!ind) {
+          try {
+            const comp = JSON.parse(localStorage.getItem('gs_v2_company') || '{}');
+            if (comp.industry) ind = comp.industry;
+          } catch(e) {}
         }
+        if (!ind) ind = 'Sắt Thép';
+
+        if (typeof window.seedIndustrySampleData === 'function') {
+          window.seedIndustrySampleData(true, ind);
+        } else if (typeof window.seedSteelPlantSampleData === 'function') {
+          window.seedSteelPlantSampleData(true);
+        }
+
+        if (typeof loadEquipmentList === 'function') loadEquipmentList();
+        if (typeof loadSourceList === 'function') loadSourceList();
+        if (typeof window.loadActivityList === 'function') window.loadActivityList();
+        if (typeof window.renderMachineOverview === 'function') window.renderMachineOverview();
+        if (typeof window.renderReconciliationSummary === 'function') window.renderReconciliationSummary();
+        if (typeof renderDashboard === 'function') renderDashboard();
+        if (typeof updateDashboard === 'function') updateDashboard();
+        if (typeof window.applyFilter === 'function') window.applyFilter();
+
+        const toast = document.createElement('div');
+        toast.textContent = `🎉 Đã nạp thành công bộ dữ liệu mẫu chuẩn ngành ${ind} 2026 (Thiết bị, Nguồn phát thải, 12 tháng hoạt động & Hóa đơn đối soát)!`;
+        toast.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#1a7f4b;color:#fff;padding:12px 24px;border-radius:8px;font-size:0.85rem;z-index:99999;box-shadow:0 4px 16px rgba(0,0,0,0.2);max-width:90%;text-align:center;line-height:1.4;';
+        document.body.appendChild(toast);
+        setTimeout(() => toast.remove(), 4000);
       });
     }
 
@@ -4245,32 +4595,48 @@
               localStorage.setItem(getBranchStorageKey('sources'), JSON.stringify(sourceList));
 
               const rawUser = (localStorage.getItem('gs_current_user') || 'guest').trim();
+              const userSlug = rawUser.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '') || 'guest';
               const branchEl = document.getElementById('branch-selector');
               const branchName = (branchEl && branchEl.value) ? branchEl.value : 'main';
               const branchKey = branchName.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '') || 'main';
+
+              const slugEqKey = `gs_data_${userSlug}_${branchKey}_equipment`;
+              const slugSrcKey = `gs_data_${userSlug}_${branchKey}_sources`;
+              const slugActKey = `gs_data_${userSlug}_${branchKey}_activity`;
+
               const rawEqKey = `gs_data_${rawUser}_${branchKey}_equipment`;
               const rawSrcKey = `gs_data_${rawUser}_${branchKey}_sources`;
               const rawActKey = `gs_data_${rawUser}_${branchKey}_activity`;
-              if (rawEqKey !== eqKey) {
+
+              localStorage.setItem(slugEqKey, JSON.stringify(currentList));
+              localStorage.setItem(slugSrcKey, JSON.stringify(sourceList));
+              if (rawEqKey !== slugEqKey) {
                 localStorage.setItem(rawEqKey, JSON.stringify(currentList));
                 localStorage.setItem(rawSrcKey, JSON.stringify(sourceList));
               }
+
               loadEquipmentList();
               loadSourceList();
 
+              const impYear = todayStr.split('-')[0];
               try {
-                if (typeof window.autoGenerateMonthlyOperationalRecords === 'function') {
-                  window.autoGenerateMonthlyOperationalRecords(todayStr.split('-')[0], false);
+                if (typeof window.autoGenerateDailyOperationalRecords === 'function') {
+                  window.autoGenerateDailyOperationalRecords(impYear, 'all', false);
+                } else if (typeof window.autoGenerateMonthlyOperationalRecords === 'function') {
+                  window.autoGenerateMonthlyOperationalRecords(impYear, false);
                 }
               } catch (e) {
-                console.warn('autoGenerateMonthlyOperationalRecords notice:', e);
+                console.warn('autoGenerateDailyOperationalRecords notice:', e);
               }
 
               // Tự động bổ sung hóa đơn thanh toán kế toán định kỳ (EVN + Dầu) nếu chưa có cho năm đó
               try {
-                const actKey = getBranchStorageKey('activity');
-                let actList = JSON.parse(localStorage.getItem(actKey) || '[]');
-                const impYear = todayStr.split('-')[0];
+                let actList = JSON.parse(
+                  localStorage.getItem(slugActKey) ||
+                  localStorage.getItem(rawActKey) ||
+                  localStorage.getItem(actKey) ||
+                  '[]'
+                );
                 const hasInvoices = actList.some(a => a.isInvoice === 'true' && a.date && a.date.startsWith(impYear));
                 if (!hasInvoices) {
                   const elecSrc = sourceList.find(s => (s.category && s.category.includes('điện')) || (s.type && s.type.toLowerCase().includes('điện')));
@@ -4321,7 +4687,8 @@
                     }
                   }
                   localStorage.setItem(actKey, JSON.stringify(actList));
-                  if (rawActKey !== actKey) {
+                  localStorage.setItem(slugActKey, JSON.stringify(actList));
+                  if (rawActKey !== slugActKey) {
                     localStorage.setItem(rawActKey, JSON.stringify(actList));
                   }
                 }

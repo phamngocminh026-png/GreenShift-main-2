@@ -577,29 +577,6 @@
       btnMockBottom.addEventListener('click', fillMockData);
     }
 
-    // Goi y mau Quy trinh cong nghe san xuat theo Nghi dinh 06/2022/ND-CP
-    const btnSuggestProcess = document.getElementById('btn-suggest-process-desc');
-    if (btnSuggestProcess) {
-      btnSuggestProcess.addEventListener('click', () => {
-        const indVal = getVal('ci-setup-industry') || 'Sắt Thép';
-        const txtEl = document.getElementById('ci-setup-desc-process');
-        if (txtEl) {
-          const sample = getIndustryProcessPreset(indVal);
-          txtEl.value = sample;
-          txtEl.focus();
-        }
-      });
-    }
-
-    const indSelectEl = document.getElementById('ci-setup-industry');
-    if (indSelectEl) {
-      indSelectEl.addEventListener('change', () => {
-        const txtEl = document.getElementById('ci-setup-desc-process');
-        if (txtEl && (!txtEl.value || txtEl.value.trim().length === 0)) {
-          txtEl.value = getIndustryProcessPreset(indSelectEl.value);
-        }
-      });
-    }
 
     const btnExportBackup = document.getElementById('btn-export-backup');
     if (btnExportBackup) {

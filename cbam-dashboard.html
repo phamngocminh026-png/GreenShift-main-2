@@ -752,17 +752,30 @@
     </div>
   </div>
 
+  <script src="assets/js/ef-master.js"></script>
   <script>
     function safeParse(val) {
         if (val === null || val === undefined || val === '') return 0;
         if (typeof val === 'number') return isNaN(val) ? 0 : val;
-        let s = String(val).replace(/\s/g, '').trim();
-        if (s.includes(',') && !s.includes('.')) {
-            // Trường hợp số thập phân kiểu Việt Nam: "4840,00" -> "4840.00"
-            s = s.replace(/,/g, '.');
-        } else if (s.includes(',') && s.includes('.')) {
-            // Trường hợp có phân cách hàng nghìn: "1,250.50" -> "1250.50"
+        let s = String(val).trim().replace(/\s/g, '');
+        if (!s || s === '-') return 0;
+        s = s.replace(/(tco2e|tco2|kwh|mwh|vnd|vnđ|lit|lít|kg|tan|tấn|tj)$/i, '').trim();
+        const commaIdx = s.lastIndexOf(',');
+        const dotIdx = s.lastIndexOf('.');
+        const commaCount = (s.match(/,/g) || []).length;
+        const dotCount = (s.match(/\./g) || []).length;
+        if (commaCount > 0 && dotCount > 0) {
+            if (commaIdx > dotIdx) {
+                s = s.replace(/\./g, '').replace(/,/g, '.');
+            } else {
+                s = s.replace(/,/g, '');
+            }
+        } else if (dotCount > 1) {
+            s = s.replace(/\./g, '');
+        } else if (commaCount > 1) {
             s = s.replace(/,/g, '');
+        } else if (commaCount === 1) {
+            s = s.replace(/,/g, '.');
         }
         const num = parseFloat(s);
         return isNaN(num) ? 0 : num;
@@ -2075,6 +2088,10 @@
       }
       
       const qty = safeParse(qtyStr);
+      if (qty <= 0) {
+        alert("Vui lòng nhập số lượng nhiên liệu lớn hơn 0!");
+        return;
+      }
       const fuelData = JSON.parse(fuelVal);
       const unit = document.getElementById('ipcc-unit').value;
       
@@ -2348,6 +2365,10 @@ function exportInternalReport() {
       }
       
       const qty = safeParse(qtyStr);
+      if (qty <= 0) {
+        alert("Vui lòng nhập khối lượng vật liệu lớn hơn 0!");
+        return;
+      }
       const matData = JSON.parse(matVal);
       
       // tCO2e = Khối lượng (tấn) * Hệ số EF (tCO2e/tấn)
@@ -2407,6 +2428,10 @@ function exportInternalReport() {
       }
       
       const qty = safeParse(qtyStr);
+      if (qty <= 0) {
+        alert("Vui lòng nhập sản lượng hơi nước/nhiệt lớn hơn 0!");
+        return;
+      }
       let heat_GJ = 0;
       
       if(unit === 'ton') {
@@ -2579,9 +2604,11 @@ function exportInternalReport() {
         const mwh = safeParse(document.getElementById('em-indirect-mwh').value) || 0;
         const efSource = document.getElementById('ef-source') ? document.getElementById('ef-source').value : 'default_2023';
         const efInput = document.getElementById('em-indirect-ef');
-        let ef = 0.7221;
-        if (efSource === 'default_2023' || efSource === 'default') ef = 0.7221;
-        else if (efSource === 'qd_2626') ef = 0.6766;
+        const defaultCbamef = (window.EF_MASTER && window.EF_MASTER.VN && window.EF_MASTER.VN.electricity && window.EF_MASTER.VN.electricity.cbam_default) || 0.7221;
+        const latestGridEf = (window.EF_MASTER && window.EF_MASTER.VN && window.EF_MASTER.VN.electricity && window.EF_MASTER.VN.electricity.latest_year) || 0.6766;
+        let ef = defaultCbamef;
+        if (efSource === 'default_2023' || efSource === 'default') ef = defaultCbamef;
+        else if (efSource === 'qd_2626') ef = latestGridEf;
         else if (efSource === 'actual') ef = safeParse(efInput ? efInput.value : 0) || 0;
         const seeIndirBase = (mwh * ef) / al;
   
@@ -2748,7 +2775,7 @@ function exportInternalReport() {
         // Khấu trừ giá carbon nội địa theo Điều 9 CBAM: Khấu trừ dựa trên lượng phát thải thực tế đã nộp giá carbon tại nước xuất xứ
         const localPrice = safeParse(document.getElementById('s3-local-price') ? document.getElementById('s3-local-price').value : 0) || 0;
         const localCoveredInput = document.getElementById('s3-local-covered-emissions');
-        const localCoveredEmissions = (localCoveredInput && safeParse(localCoveredInput.value) > 0) ? safeParse(localCoveredInput.value) : (exportQty * seeTotal);
+        const localCoveredEmissions = (localCoveredInput && safeParse(localCoveredInput.value) > 0) ? safeParse(localCoveredInput.value) : 0;
         const localDeduction = (localPrice > 0 && localCoveredEmissions > 0) ? Math.min(grossCost, localCoveredEmissions * localPrice) : 0;
         
         const s3LocalDeduction = document.getElementById('s3-local-deduction');
@@ -3018,6 +3045,22 @@ function exportInternalReport() {
               badge.style.color = '#065f46';
               badge.style.border = '1.5px solid #6ee7b7';
               badge.innerHTML = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg> \u0110\u00e3 kh\u00f3a &amp; K\u00fd s\u1ed1 (Audit-Ready)';
+            }
+            // Record audit log to Supabase if client is ready
+            if (window.supabaseClient && typeof window.supabaseClient.recordAuditLog === 'function') {
+              window.supabaseClient.recordAuditLog({
+                action: 'LOCK_CBAM_DOSSIER',
+                table_name: 'cbam_reports',
+                record_id: (snapshot.installation || 'Installation') + '_' + snapshot.reportingYear,
+                new_data: {
+                  installation: snapshot.installation,
+                  reportingYear: snapshot.reportingYear,
+                  reportingPeriod: snapshot.reportingPeriod,
+                  seeCombined: snapshot.seeCombined,
+                  finalCost: snapshot.finalCost,
+                  sha256: snapshot.sha256
+                }
+              }).catch(e => console.warn('Supabase audit log error:', e));
             }
           } catch(hashErr) {
             console.warn('SHA-256 generation failed:', hashErr);

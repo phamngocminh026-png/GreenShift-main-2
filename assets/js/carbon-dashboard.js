@@ -227,7 +227,7 @@ function renderDashboard() {
   const engineerList = filtered.filter(isEngineerAct);
 
   // Tính toán riêng cho Hóa đơn Kế toán (12 tháng)
-  const monthlyInvoiceData = { 1: Array(12).fill(0), 2: Array(12).fill(0), 3: Array(12).fill(0), total: Array(12).fill(0) };
+  const monthlyInvoiceData = { 0: Array(12).fill(0), 1: Array(12).fill(0), 2: Array(12).fill(0), 3: Array(12).fill(0), total: Array(12).fill(0) };
   let totalInvoiceKg = 0;
   const invoiceMonths = new Set();
   const invoiceEnergyMonthKeys = new Set();
@@ -249,7 +249,7 @@ function renderDashboard() {
   });
 
   // Tính toán riêng cho Kỹ thuật máy móc (12 tháng)
-  const monthlyEngineerData = { 1: Array(12).fill(0), 2: Array(12).fill(0), 3: Array(12).fill(0), total: Array(12).fill(0) };
+  const monthlyEngineerData = { 0: Array(12).fill(0), 1: Array(12).fill(0), 2: Array(12).fill(0), 3: Array(12).fill(0), total: Array(12).fill(0) };
   let totalEngineerKg = 0;
   engineerList.forEach(act => {
     const co2e = parseFloat(act.co2e) || 0;
@@ -268,10 +268,10 @@ function renderDashboard() {
   // Xác định danh sách hoạt động activeList và tổng phát thải totalKg theo góc nhìn viewMode
   let activeList = [];
   let totalKg = 0;
-  const scopeData = { 'Scope 1': 0, 'Scope 2': 0, 'Scope 3': 0 };
+  const scopeData = { 'Scope 0': 0, 'Scope 1': 0, 'Scope 2': 0, 'Scope 3': 0 };
   const categoryData = {};
   const equipmentData = {};
-  const monthlyScopeData = { 1: Array(12).fill(0), 2: Array(12).fill(0), 3: Array(12).fill(0) };
+  const monthlyScopeData = { 0: Array(12).fill(0), 1: Array(12).fill(0), 2: Array(12).fill(0), 3: Array(12).fill(0) };
   const catScopeMap = {};
   const eqScopeMap = {};
 
@@ -320,11 +320,18 @@ function renderDashboard() {
     const cat = getTrueCategory(act);
     const scNum = getScopeNum(cat);
     const scope = 'Scope ' + scNum;
-    scopeData[scope] += co2e;
+    if (scopeData[scope] !== undefined) {
+      scopeData[scope] += co2e;
+    } else {
+      scopeData['Scope 0'] = (scopeData['Scope 0'] || 0) + co2e;
+    }
 
     if (act.date) {
       const monthIdx = parseInt(act.date.split('-')[1], 10) - 1;
       if (monthIdx >= 0 && monthIdx < 12) {
+        if (!monthlyScopeData[scNum]) {
+          monthlyScopeData[scNum] = Array(12).fill(0);
+        }
         monthlyScopeData[scNum][monthIdx] += co2e;
       }
     }
@@ -372,7 +379,7 @@ function renderDashboard() {
     displayTotalKg = totalKg;
   }
 
-  const displayScopeData = { 'Scope 1': 0, 'Scope 2': 0, 'Scope 3': 0 };
+  const displayScopeData = { 'Scope 0': 0, 'Scope 1': 0, 'Scope 2': 0, 'Scope 3': 0 };
   const displayCategoryData = {};
   const displayEquipmentData = {};
 
@@ -381,7 +388,11 @@ function renderDashboard() {
     const cat = getTrueCategory(act);
     const scNum = getScopeNum(cat);
     const scope = 'Scope ' + scNum;
-    displayScopeData[scope] += co2e;
+    if (displayScopeData[scope] !== undefined) {
+      displayScopeData[scope] += co2e;
+    } else {
+      displayScopeData['Scope 0'] = (displayScopeData['Scope 0'] || 0) + co2e;
+    }
     displayCategoryData[cat] = (displayCategoryData[cat] || 0) + co2e;
     const eq = act.sourceName || 'Chưa rõ';
     displayEquipmentData[eq] = (displayEquipmentData[eq] || 0) + co2e;
@@ -483,8 +494,16 @@ function renderDashboard() {
               Biogenic CO2: ${bioTonnes}t
             </span>
         ` : '';
+        const unclassTonnes = ((displayScopeData['Scope 0'] || 0) / 1000).toLocaleString('vi-VN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        const unclassBadgeHTML = (displayScopeData['Scope 0'] || 0) > 0 ? `
+            <span style="display: inline-flex; align-items: center; gap: 4px; padding: 2px 7px; border-radius: 4px; background: #fff1f2; color: #be123c; border: 1px solid #fecdd3; white-space: nowrap;" title="Phát thải chưa phân loại Scope - Cần phân loại nguồn để hoàn thiện báo cáo">
+              <span style="width: 6px; height: 6px; border-radius: 50%; background: #e11d48; display: inline-block;"></span>
+              Chưa phân loại: ${unclassTonnes}t
+            </span>
+        ` : '';
         tSub.innerHTML = `
           <div style="display: flex; justify-content: center; gap: 6px; flex-wrap: wrap; margin-top: 6px; font-size: 0.74rem; font-weight: 600;">
+            ${unclassBadgeHTML}
             <span style="display: inline-flex; align-items: center; gap: 4px; padding: 2px 7px; border-radius: 4px; background: #fff7ed; color: #c2410c; border: 1px solid #ffedd5; white-space: nowrap;">
               <span style="width: 6px; height: 6px; border-radius: 50%; background: #ea580c; display: inline-block;"></span>
               Scope 1: ${sc1}t
@@ -511,7 +530,7 @@ function renderDashboard() {
     const years = [targetYear - 2, targetYear - 1, targetYear];
     
     // Structure: yoyData[scopeNum][catName][year] = total tCO2e
-    const yoyData = { 1: {}, 2: {}, 3: {} };
+    const yoyData = { 0: {}, 1: {}, 2: {}, 3: {} };
     
     // Lọc theo viewMode cho các năm
     const yoyActivities = activities.filter(act => {
@@ -527,6 +546,9 @@ function renderDashboard() {
         const co2e = parseFloat(act.co2e) || 0;
         const trueCat = getTrueCategory(act);
         const scNum = getScopeNum(trueCat);
+        if (!yoyData[scNum]) {
+          yoyData[scNum] = {};
+        }
         if (!yoyData[scNum][trueCat]) {
           yoyData[scNum][trueCat] = { [years[0]]: 0, [years[1]]: 0, [years[2]]: 0 };
         }
@@ -698,7 +720,8 @@ function renderDashboard() {
       let sc1 = (monthlyScopeData[1][m] || 0) / 1000;
       let sc2 = (monthlyScopeData[2][m] || 0) / 1000;
       let sc3 = (monthlyScopeData[3][m] || 0) / 1000;
-      let mTotal = sc1 + sc2 + sc3;
+      let sc0 = (monthlyScopeData[0] ? (monthlyScopeData[0][m] || 0) : 0) / 1000;
+      let mTotal = sc1 + sc2 + sc3 + sc0;
 
       if (viewMode === 'invoice') {
         mTotal = (monthlyInvoiceData.total[m] || 0) / 1000;
@@ -718,7 +741,8 @@ function renderDashboard() {
       let sc1 = (monthlyScopeData[1][m] || 0) / 1000;
       let sc2 = (monthlyScopeData[2][m] || 0) / 1000;
       let sc3 = (monthlyScopeData[3][m] || 0) / 1000;
-      let mTotal = sc1 + sc2 + sc3;
+      let sc0 = (monthlyScopeData[0] ? (monthlyScopeData[0][m] || 0) : 0) / 1000;
+      let mTotal = sc1 + sc2 + sc3 + sc0;
       if (viewMode === 'invoice') mTotal = (monthlyInvoiceData.total[m] || 0) / 1000;
       else if (viewMode === 'engineer') mTotal = (monthlyEngineerData.total[m] || 0) / 1000;
 
@@ -981,14 +1005,24 @@ function renderDashboard() {
   if (ctxScope) {
     chartScopeObj = new Chart(ctxScope, {
       type: 'doughnut',
-      data: {
-        labels: ['Scope 1 (Trực tiếp)', 'Scope 2 (Điện lưới)', 'Scope 3 (Chuỗi cung ứng)'],
-        datasets: [{
-          data: [displayScopeData['Scope 1'], displayScopeData['Scope 2'], displayScopeData['Scope 3']],
-          backgroundColor: scopeColors,
-          borderWidth: 0
-        }]
-      },
+      data: (() => {
+        const labels = ['Scope 1 (Trực tiếp)', 'Scope 2 (Điện lưới)', 'Scope 3 (Chuỗi cung ứng)'];
+        const chartData = [displayScopeData['Scope 1'] || 0, displayScopeData['Scope 2'] || 0, displayScopeData['Scope 3'] || 0];
+        const colors = [...scopeColors];
+        if ((displayScopeData['Scope 0'] || 0) > 0) {
+          labels.push('Chưa phân loại (Cần phân loại)');
+          chartData.push(displayScopeData['Scope 0']);
+          colors.push('#f43f5e');
+        }
+        return {
+          labels,
+          datasets: [{
+            data: chartData,
+            backgroundColor: colors,
+            borderWidth: 0
+          }]
+        };
+      })(),
       options: {
         responsive: true,
         maintainAspectRatio: false,
@@ -1029,7 +1063,7 @@ function renderDashboard() {
 
       const dailyEngineerData = Array(daysCount).fill(0);
       const dailyDowntimeData = Array(daysCount).fill(0);
-      const dailyScopeData = { 1: Array(daysCount).fill(0), 2: Array(daysCount).fill(0), 3: Array(daysCount).fill(0) };
+      const dailyScopeData = { 0: Array(daysCount).fill(0), 1: Array(daysCount).fill(0), 2: Array(daysCount).fill(0), 3: Array(daysCount).fill(0) };
 
       engMonthActs.forEach(act => {
         const co2e = parseFloat(act.co2e) || 0;

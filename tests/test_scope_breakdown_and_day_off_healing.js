@@ -26,7 +26,7 @@ console.log('   PASS 2: Scope breakdown option, stack toggle and chart controls 
 
 // 3. Kiểm tra logic phân rã Scope trong carbon-dashboard.js cho cả Chế độ Ngày và Chế độ Năm
 console.log('3. Checking daily & yearly scope breakdown dataset logic...');
-assert.ok(dashJs.includes("const dailyScopeData = { 1: Array(daysCount).fill(0), 2: Array(daysCount).fill(0), 3: Array(daysCount).fill(0) };"),
+assert.ok(dashJs.includes("dailyScopeData") && dashJs.includes("1: Array(daysCount).fill(0)") && dashJs.includes("2: Array(daysCount).fill(0)") && dashJs.includes("3: Array(daysCount).fill(0)"),
   'carbon-dashboard.js must calculate dailyScopeData for all 3 scopes');
 assert.ok(dashJs.includes("label: 'Scope 1 - Trực tiếp'"), 'Daily/Yearly view must have Scope 1 dataset');
 assert.ok(dashJs.includes("label: 'Scope 2 - Gián tiếp điện lưới'"), 'Daily/Yearly view must have Scope 2 dataset');

@@ -1510,5 +1510,103 @@ CREATE POLICY "audit_logs_insert_policy" ON public.audit_logs
         auth.role() = 'authenticated'
     );
 
+-- 5.1 Generic Audit Trigger Function (ISO 14064-3 Compliance)
+CREATE OR REPLACE FUNCTION public.fn_audit_log_changes()
+RETURNS TRIGGER AS $$
+DECLARE
+    v_rec_id VARCHAR(150);
+    v_facility_id BIGINT;
+    v_old_data JSONB := NULL;
+    v_new_data JSONB := NULL;
+    v_user VARCHAR(150);
+BEGIN
+    v_user := COALESCE(auth.email(), current_user);
+
+    IF (TG_OP = 'DELETE') THEN
+        v_rec_id := CAST(OLD.id AS VARCHAR);
+        v_old_data := to_jsonb(OLD);
+        BEGIN
+            v_facility_id := OLD.facility_id;
+        EXCEPTION WHEN OTHERS THEN
+            v_facility_id := NULL;
+        END;
+        INSERT INTO public.audit_logs (table_name, record_id, action, old_data, new_data, changed_by, facility_id, change_reason)
+        VALUES (TG_TABLE_NAME, v_rec_id, 'DELETE', v_old_data, NULL, v_user, v_facility_id, 'Thao tác xóa bản ghi tự động ghi nhận bởi trigger');
+        RETURN OLD;
+    ELSIF (TG_OP = 'UPDATE') THEN
+        v_rec_id := CAST(NEW.id AS VARCHAR);
+        v_old_data := to_jsonb(OLD);
+        v_new_data := to_jsonb(NEW);
+        BEGIN
+            v_facility_id := NEW.facility_id;
+        EXCEPTION WHEN OTHERS THEN
+            v_facility_id := NULL;
+        END;
+        INSERT INTO public.audit_logs (table_name, record_id, action, old_data, new_data, changed_by, facility_id, change_reason)
+        VALUES (TG_TABLE_NAME, v_rec_id, 'UPDATE', v_old_data, v_new_data, v_user, v_facility_id, 'Thao tác cập nhật bản ghi tự động ghi nhận bởi trigger');
+        RETURN NEW;
+    ELSIF (TG_OP = 'INSERT') THEN
+        v_rec_id := CAST(NEW.id AS VARCHAR);
+        v_new_data := to_jsonb(NEW);
+        BEGIN
+            v_facility_id := NEW.facility_id;
+        EXCEPTION WHEN OTHERS THEN
+            v_facility_id := NULL;
+        END;
+        INSERT INTO public.audit_logs (table_name, record_id, action, old_data, new_data, changed_by, facility_id, change_reason)
+        VALUES (TG_TABLE_NAME, v_rec_id, 'INSERT', NULL, v_new_data, v_user, v_facility_id, 'Thao tác thêm mới bản ghi tự động ghi nhận bởi trigger');
+        RETURN NEW;
+    END IF;
+    RETURN NULL;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Gắn trigger tự động ghi nhật ký kiểm toán cho các bảng nghiệp vụ chính
+DROP TRIGGER IF EXISTS trg_audit_activities ON public.activities;
+CREATE TRIGGER trg_audit_activities
+    AFTER INSERT OR UPDATE OR DELETE ON public.activities
+    FOR EACH ROW EXECUTE FUNCTION public.fn_audit_log_changes();
+
+DROP TRIGGER IF EXISTS trg_audit_inventory_reports ON public.inventory_reports;
+CREATE TRIGGER trg_audit_inventory_reports
+    AFTER INSERT OR UPDATE OR DELETE ON public.inventory_reports
+    FOR EACH ROW EXECUTE FUNCTION public.fn_audit_log_changes();
+
+DROP TRIGGER IF EXISTS trg_audit_activity_productions ON public.activity_productions;
+CREATE TRIGGER trg_audit_activity_productions
+    AFTER INSERT OR UPDATE OR DELETE ON public.activity_productions
+    FOR EACH ROW EXECUTE FUNCTION public.fn_audit_log_changes();
+
+DROP TRIGGER IF EXISTS trg_audit_equipment_logs ON public.equipment_logs;
+CREATE TRIGGER trg_audit_equipment_logs
+    AFTER INSERT OR UPDATE OR DELETE ON public.equipment_logs
+    FOR EACH ROW EXECUTE FUNCTION public.fn_audit_log_changes();
+
+-- 5.2 Period Lock Guard (Chặn chỉnh sửa số liệu đã khóa sổ kỳ kiểm kê)
+CREATE OR REPLACE FUNCTION public.fn_prevent_locked_modifications()
+RETURNS TRIGGER AS $$
+BEGIN
+    IF (OLD.is_locked = TRUE) THEN
+        RAISE EXCEPTION 'Không thể sửa đổi hoặc xóa dữ liệu đã được chốt và khóa sổ kỳ kiểm kê (is_locked = true).';
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_lock_activity_productions ON public.activity_productions;
+CREATE TRIGGER trg_lock_activity_productions
+    BEFORE UPDATE OR DELETE ON public.activity_productions
+    FOR EACH ROW EXECUTE FUNCTION public.fn_prevent_locked_modifications();
+
+DROP TRIGGER IF EXISTS trg_lock_equipment_logs ON public.equipment_logs;
+CREATE TRIGGER trg_lock_equipment_logs
+    BEFORE UPDATE OR DELETE ON public.equipment_logs
+    FOR EACH ROW EXECUTE FUNCTION public.fn_prevent_locked_modifications();
+
+DROP TRIGGER IF EXISTS trg_lock_cbam_dossiers ON public.cbam_dossiers;
+CREATE TRIGGER trg_lock_cbam_dossiers
+    BEFORE UPDATE OR DELETE ON public.cbam_dossiers
+    FOR EACH ROW EXECUTE FUNCTION public.fn_prevent_locked_modifications();
+
 -- END OF GREENSHIFT SUPABASE SCRIPT
 -- ====================================================================

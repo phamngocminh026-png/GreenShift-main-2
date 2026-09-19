@@ -4,7 +4,16 @@ import logging
 from io import BytesIO
 from server.config import EXCEL_TEMPLATES_DIR, DEFAULT_CBAM_TEMPLATE
 
+import re
+
 logger = logging.getLogger(__name__)
+
+# Hệ số phát thải lưới điện Việt Nam chuẩn
+VN_GRID_EF_QD2626 = 0.6766       # Quyết định 2626/QĐ-BCT (Kiểm kê KNK nội địa)
+VN_GRID_EF_CBAM_DEFAULT = 0.7221 # Giá trị mặc định EC CBAM theo Công văn 263/BĐKH (Báo cáo CBAM chính thức)
+
+# Hệ số tham chiếu nhiệt chuẩn theo Annex IV CBAM Implementing Regulation (EU) 2023/1773 & EU ETS benchmark
+DEFAULT_HEAT_EF_BENCHMARK = 82.9 # tCO2/TJ (hơi nước công nghiệp / nhiệt đo đếm được)
 
 def parse_num(val, default=0.0):
     if val is None or val == '':
@@ -12,21 +21,167 @@ def parse_num(val, default=0.0):
     if isinstance(val, (int, float)):
         return float(val)
     s = str(val).strip().replace(' ', '')
-    if not s:
+    if not s or s == '-':
         return float(default)
+    
+    # Bóc tách các hậu tố đơn vị phổ biến nếu có
+    s = re.sub(r'(?i)(tco2e|tco2|kwh|mwh|vnd|vnđ|lit|lít|kg|tan|tấn|tj)$', '', s).strip()
+    
     comma_idx = s.rfind(',')
     dot_idx = s.rfind('.')
-    if comma_idx != -1 and dot_idx != -1:
+    dot_count = s.count('.')
+    comma_count = s.count(',')
+    
+    if comma_count > 0 and dot_count > 0:
         if comma_idx > dot_idx:
+            # Định dạng VN / EU: 1.234.567,89 -> 1234567.89
             s = s.replace('.', '').replace(',', '.')
         else:
+            # Định dạng US / UK: 1,234,567.89 -> 1234567.89
             s = s.replace(',', '')
-    elif comma_idx != -1:
+    elif dot_count > 1:
+        # Nhiều dấu chấm: phân cách hàng nghìn kiểu Việt Nam (vd: 1.234.567)
+        s = s.replace('.', '')
+    elif comma_count > 1:
+        # Nhiều dấu phẩy: phân cách hàng nghìn kiểu US (vd: 1,234,567)
+        s = s.replace(',', '')
+    elif comma_count == 1:
+        # Dấu phẩy đơn: phân cách thập phân kiểu Việt Nam (vd: 12,5)
         s = s.replace(',', '.')
+        
     try:
         return float(s)
     except (ValueError, TypeError):
         return float(default)
+
+def validate_cbam_input_data(data: dict) -> tuple[bool, str]:
+    if not isinstance(data, dict):
+        return False, "Dữ liệu đầu vào phải là một đối tượng JSON hợp lệ."
+    if not data:
+        return False, "Dữ liệu báo cáo không được để trống."
+    return True, ""
+
+
+def map_to_ec_fuel_label(raw_name: str) -> str:
+    """
+    Ánh xạ tên nhiên liệu người dùng nhập sang nhãn chuẩn của EC trong Parameters_Constants
+    """
+    if not raw_name:
+        return 'Other fuel'
+    name_low = str(raw_name).lower().strip()
+    if any(k in name_low for k in ('diesel', 'do', 'gas oil', 'dầu do', 'dau do')):
+        return 'Gas / Diesel Oil'
+    elif any(k in name_low for k in ('fo', 'fuel oil', 'mazut', 'dầu fo', 'dau fo')):
+        return 'Heavy Fuel Oil'
+    elif any(k in name_low for k in ('lpg', 'gas lpg', 'propane', 'butane', 'khí dầu mỏ')):
+        return 'Liquefied Petroleum Gas (LPG)'
+    elif any(k in name_low for k in ('tự nhiên', 'natural gas', 'cng', 'lng', 'metan', 'methane')):
+        return 'Natural Gas'
+    elif any(k in name_low for k in ('antraxit', 'anthracite')):
+        return 'Anthracite'
+    elif any(k in name_low for k in ('than mỡ', 'than mo', 'bituminous', 'than nâu', 'than đá', 'than da')):
+        return 'Other Bituminous Coal'
+    elif any(k in name_low for k in ('cốc', 'coke')):
+        return 'Coke Oven Coke'
+    elif any(k in name_low for k in ('sinh khối', 'biomass', 'trấu', 'mùn cưa', 'củi', 'wood', 'pellet')):
+        return 'Solid biomass (wood, pellets, etc.)'
+    elif any(k in name_low for k in ('lò cao', 'blast furnace')):
+        return 'Blast Furnace Gas'
+    elif any(k in name_low for k in ('lò cốc', 'coke oven')):
+        return 'Coke Oven Gas'
+    return str(raw_name).strip()
+
+
+def map_to_ec_process_label(raw_name: str) -> str:
+    """
+    Ánh xạ tên nguyên vật liệu/tiền chất sang danh mục chuẩn EU
+    """
+    if not raw_name:
+        return 'Other process material'
+    name_low = str(raw_name).lower().replace('-', ' ').strip()
+    if any(k in name_low for k in ('đá vôi', 'da voi', 'limestone', 'caco3', 'vôi sống', 'voi song')):
+        return 'Limestone and other carbonates'
+    elif any(k in name_low for k in ('dolomite', 'dolomit', 'đô lô mít', 'do lo mit')):
+        return 'Dolomite'
+    elif any(k in name_low for k in ('soda', 'na2co3', 'soda ash')):
+        return 'Sodium carbonate (soda ash)'
+    elif any(k in name_low for k in ('anot', 'anode', 'điện cực', 'dien cuc', 'carbon anode')):
+        return 'Carbon electrodes / anodes'
+    elif any(k in name_low for k in ('phế liệu', 'phe lieu', 'scrap', 'thép phế', 'thep phe')):
+        return 'Steel scrap'
+    return str(raw_name).strip()
+
+
+CBAM_SECTOR_GOODS_MAP = {
+    'steel': {
+        'default': "Iron or steel products",
+        'prefixes': [
+            ('2601', "Sintered Ore"),
+            ('7201', "Pig iron"),
+            ('7202', "Alloys (FeMn, FeCr, FeNi)"),
+            ('7203', "Direct reduced iron"),
+            ('7206', "Crude steel"),
+            ('7207', "Crude steel"),
+            ('7218', "Crude steel"),
+            ('7224', "Crude steel")
+        ]
+    },
+    'aluminum': {
+        'default': "Aluminium products",
+        'prefixes': [
+            ('7601', "Unwrought aluminium")
+        ]
+    },
+    'fertilizer': {
+        'default': "Mixed fertilisers",
+        'prefixes': [
+            ('2814', "Ammonia"),
+            ('2808', "Nitric acid"),
+            ('310210', "Urea"),
+            ('310230', "Mixed fertilisers"),
+            ('3105', "Mixed fertilisers")
+        ]
+    },
+    'hydrogen': {
+        'default': "Hydrogen",
+        'prefixes': []
+    },
+    'electricity': {
+        'default': "Electricity (export to EU)",
+        'prefixes': []
+    },
+    'cement': {
+        'default': "Cement",
+        'prefixes': [
+            ('25231000', "Cement clinker"),
+            ('25070080', "Calcined clays "),
+            ('25233000', "Aluminous cement")
+        ]
+    }
+}
+
+def get_cbam_goods_category(sector: str, cn_code: str, trade_name: str = '') -> str:
+    sec = (sector or '').lower().strip()
+    cn = str(cn_code or '').strip()
+    tname = str(trade_name or '').lower().strip()
+    
+    mapping = CBAM_SECTOR_GOODS_MAP.get(sec)
+    if not mapping:
+        return "Iron or steel products"
+        
+    if sec == 'cement':
+        if cn.startswith('25231000') or 'clinker' in tname:
+            return "Cement clinker"
+        if cn.startswith('25070080') or 'sét' in tname or 'clay' in tname:
+            return "Calcined clays "
+        if cn.startswith('25233000'):
+            return "Aluminous cement"
+            
+    for prefix, cat_name in mapping.get('prefixes', []):
+        if cn.startswith(prefix):
+            return cat_name
+            
+    return mapping.get('default', "Iron or steel products")
 
 
 def process_cbam_excel_report(data):
@@ -62,7 +217,7 @@ def process_cbam_excel_report(data):
         return None, None, f"Template not found at {master_path}", 404
         
     try:
-        wb = openpyxl.load_workbook(master_path)
+        wb = openpyxl.load_workbook(master_path, keep_vba=True if master_path.lower().endswith(".xlsm") else False)
         
         # Mapping logic based on Master Template Hack
         if 'A_InstData' in wb.sheetnames:
@@ -106,51 +261,29 @@ def process_cbam_excel_report(data):
             row_idx = 14
             for f in fuels:
                 if row_idx > 30: break
-                ws_b[f'D{row_idx}'] = f.get('name') or f.get('fuel') or 'Fuel'
-                ws_b[f'E{row_idx}'] = f.get('type') or 'Fossil fuel'
+                ws_b[f'D{row_idx}'] = 'Combustion'
+                raw_fuel_name = f.get('name') or f.get('fuel') or 'Fuel'
+                ws_b[f'E{row_idx}'] = map_to_ec_fuel_label(raw_fuel_name)
                 ws_b[f'F{row_idx}'] = parse_num(f.get('qty', f.get('amount', 0)))
+                if 'ncv' in f and parse_num(f['ncv']) > 0:
+                    ws_b[f'H{row_idx}'] = parse_num(f['ncv'])
+                if 'ef' in f and parse_num(f['ef']) > 0:
+                    ws_b[f'J{row_idx}'] = parse_num(f['ef'])
                 row_idx += 1
 
-            for p in procs:
+            for pr in procs:
                 if row_idx > 35: break
-                ws_b[f'D{row_idx}'] = p.get('name') or 'Process material'
-                ws_b[f'E{row_idx}'] = p.get('type') or 'Process material'
-                ws_b[f'F{row_idx}'] = parse_num(p.get('qty', p.get('amount', 0)))
+                ws_b[f'D{row_idx}'] = 'Process emissions'
+                raw_proc_name = pr.get('name') or pr.get('material') or 'Process material'
+                ws_b[f'E{row_idx}'] = map_to_ec_process_label(raw_proc_name)
+                ws_b[f'F{row_idx}'] = parse_num(pr.get('qty', pr.get('amount', 0)))
+                if 'ef' in pr and parse_num(pr['ef']) > 0:
+                    ws_b[f'J{row_idx}'] = parse_num(pr['ef'])
                 row_idx += 1
 
         # Phân loại Goods Category (cat) CHUẨN XÁC THEO 18 CỤM TỪ CỦA EU (Parameters_Constants!CONST_LIST_Goods)
-        if sector == 'steel':
-            cat = "Iron or steel products"
-            if cn_code.startswith('2601'): cat = "Sintered Ore"  # Chữ O viết hoa chuẩn EU
-            elif cn_code.startswith('7201'): cat = "Pig iron"
-            elif cn_code.startswith('7202'): cat = "Alloys (FeMn, FeCr, FeNi)"
-            elif cn_code.startswith('7203'): cat = "Direct reduced iron"  # Chuẩn EU (thay vì DRI)
-            elif cn_code.startswith('7206') or cn_code.startswith('7207') or cn_code.startswith('7218') or cn_code.startswith('7224'):
-                cat = "Crude steel" 
-                
-        elif sector == 'aluminum':
-            cat = "Aluminium products"
-            if cn_code.startswith('7601'): cat = "Unwrought aluminium"
-
-        elif sector == 'fertilizer':
-            cat = "Mixed fertilisers"  # Chuẩn Anh 'fertilisers' (thay vì chữ 'z')
-            if cn_code.startswith('2814'): cat = "Ammonia"
-            elif cn_code.startswith('2808'): cat = "Nitric acid"
-            elif cn_code.startswith('310210'): cat = "Urea"
-            elif cn_code.startswith('310230'): cat = "Mixed fertilisers"  # Amoni nitrat thuộc nhóm phân bón
-            elif cn_code.startswith('3105'): cat = "Mixed fertilisers"
-
-        elif sector == 'hydrogen':
-            cat = "Hydrogen"
-            
-        elif sector == 'electricity':
-            cat = "Electricity (export to EU)"  # Chuẩn EU (thay vì Electricity)
-            
-        elif sector == 'cement':
-            cat = "Cement"
-            if cn_code.startswith('25231000') or 'clinker' in trade_name.lower(): cat = "Cement clinker"
-            elif cn_code.startswith('25070080') or 'sét' in trade_name.lower() or 'clay' in trade_name.lower(): cat = "Calcined clays "
-            elif cn_code.startswith('25233000'): cat = "Aluminous cement"
+        cat = get_cbam_goods_category(sector, cn_code, trade_name)
+        if sector == 'cement':
             if not cn_code: cn_code = '25231000'
             if not trade_name: trade_name = 'Cement'
             if not route_vn: route_vn = 'Example process A'
@@ -212,8 +345,8 @@ def process_cbam_excel_report(data):
             # 3. Map dữ liệu Trao đổi Nhiệt đo đếm được (Import/Export Measurable Heat)
             heat_tj = parse_num(data.get('heatTj', 0))
             heat_em = parse_num(data.get('heatEm', data.get('heatExchange', data.get('netHeat', 0))))
-            heat_ef = parse_num(data.get('heatEf', 82.9))
-            if heat_ef <= 0: heat_ef = 82.9
+            heat_ef = parse_num(data.get('heatEf', DEFAULT_HEAT_EF_BENCHMARK))
+            if heat_ef <= 0: heat_ef = DEFAULT_HEAT_EF_BENCHMARK
 
             if heat_tj == 0 and heat_em != 0:
                 heat_tj = round(abs(heat_em) / heat_ef, 4)
@@ -242,7 +375,7 @@ def process_cbam_excel_report(data):
 
             # 4. Gán Sản lượng điện và Hệ số phát thải điện vào D_Processes
             ws_d['L65'] = parse_num(data.get('elecMwh', 0))
-            ws_d['L66'] = parse_num(data.get('elecEf', 0.7221))
+            ws_d['L66'] = parse_num(data.get('elecEf', VN_GRID_EF_CBAM_DEFAULT))
 
         # 3. GHI TIỀN CHẤT VÀ DỌN SẠCH CÁC BLOCK TIỀN CHẤT MẪU CŨ Ở E_PURCHPREC
         precursors = data.get('precursors', [])
@@ -318,7 +451,8 @@ def process_cbam_excel_report(data):
         wb.save(output)
         output.seek(0)
         
-        filename = f"CBAM_Report_Filled_{data.get('year', 2026)}.xlsx"
+        ext = ".xlsm" if master_path.lower().endswith(".xlsm") else ".xlsx"
+        filename = f"CBAM_Report_Filled_{data.get('year', 2026)}{ext}"
         return output, filename, None, 200
 
     except Exception as e:
@@ -387,8 +521,8 @@ def process_internal_audit_report(data):
         wastewater = data.get('wastewater', [])
         heats = data.get('heatExchanges', [])
         elecMwh = parse_num(data.get('elecMwh', 0))
-        # Cập nhật hệ số lưới điện VN mới nhất (0.6766 theo QĐ 2626 hoặc 0.7221 theo CV 263/CBAM default)
-        elecEf = parse_num(data.get('elecEf', 0.6766)) 
+        # Cập nhật hệ số lưới điện VN mới nhất (0.7221 theo CV 263/CBAM default hoặc 0.6766 theo QĐ 2626)
+        elecEf = parse_num(data.get('elecEf', VN_GRID_EF_CBAM_DEFAULT)) 
         precursors = data.get('precursors', [])
         al_val = parse_num(data.get('al', 0))
         

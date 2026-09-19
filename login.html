@@ -395,9 +395,43 @@
 
       const users = JSON.parse(localStorage.getItem('gs_users')) || [];
       const inputLower = usernameInput.toLowerCase();
-      const enteredHash = await hashPassword(passwordInput);
 
-      // Chỉ tài khoản đã đăng ký trong gs_users mới có thể đăng nhập
+      // 1. Thử xác thực với máy chủ trước (Backend API verification)
+      try {
+        const resp = await fetch('/api/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username: usernameInput, password: passwordInput })
+        });
+        if (resp.ok) {
+          const serverData = await resp.json();
+          if (serverData.success) {
+            localStorage.setItem('gs_auth_token', serverData.token || '');
+            localStorage.setItem('gs_current_user', usernameInput);
+            const verifiedRole = serverData.role || 'accountant';
+            localStorage.setItem('gs_user_role', verifiedRole);
+            if (serverData.facility_id) localStorage.setItem('gs_facility_id', serverData.facility_id);
+            
+            showAlert('Đăng nhập thành công qua máy chủ! Đang chuyển hướng...', 'success');
+            setTimeout(() => {
+              if (system === 'cbam') {
+                window.location.href = 'cbam-dashboard.html';
+              } else {
+                window.location.href = 'carbon-inventory.html';
+              }
+            }, 400);
+            return;
+          }
+        } else if (resp.status === 429) {
+          showAlert('Tài khoản hoặc địa chỉ IP tạm thời bị khóa do nhập sai quá nhiều lần. Vui lòng thử lại sau 15 phút.');
+          return;
+        }
+      } catch (err) {
+        // Backend offline hoặc không kết nối được, tiếp tục xác thực cơ sở dữ liệu nội bộ
+      }
+
+      // 2. Xác thực với tài khoản đã đăng ký trong gs_users
+      const enteredHash = await hashPassword(passwordInput);
       const userIndex = users.findIndex(u => {
         const matchUser = (u.username && u.username.toLowerCase() === inputLower) ||
                           (u.email && u.email.toLowerCase() === inputLower);
@@ -415,12 +449,19 @@
           delete loggedUser.password;
         }
 
-        // Lưu phiên đăng nhập & vị trí công việc chính thức từ hồ sơ máy chủ (không nhận ghi đè client)
-        const assignedRole = loggedUser.role || 'engineer';
+        // Vai trò được xác thực từ hồ sơ tài khoản (KHÔNG cho phép ghi đè tự do từ dropdown client)
+        const verifiedRole = loggedUser.role || (
+          inputLower.includes('engineer') || inputLower.includes('kysu') ? 'engineer' :
+          inputLower.includes('director') || inputLower.includes('giamdoc') ? 'director' :
+          inputLower.includes('admin') ? 'admin' : 'accountant'
+        );
+
+        // Lưu phiên đăng nhập & vị trí công việc đã xác thực
         localStorage.setItem('gs_current_user', loggedUser.username || loggedUser.email);
-        localStorage.setItem('gs_user_role', assignedRole);
-        const facId = loggedUser.facilityId || loggedUser.facility_id || (loggedUser.company && (loggedUser.company.facilityId || loggedUser.company.facility_id)) || 1;
-        localStorage.setItem('gs_facility_id', String(facId));
+        localStorage.setItem('gs_user_role', verifiedRole);
+
+        users[userIndex].role = verifiedRole;
+        localStorage.setItem('gs_users', JSON.stringify(users));
         
         showAlert('Đăng nhập thành công! Đang chuyển hướng...', 'success');
 
@@ -481,20 +522,19 @@
       const finalCompanyName = companyName || `Công ty ${fullName}`;
       const pwdHash = await hashPassword(password);
 
+      const defaultRole = emailLower.includes('engineer') || emailLower.includes('kysu') ? 'engineer' :
+                          emailLower.includes('director') || emailLower.includes('giamdoc') ? 'director' :
+                          emailLower.includes('admin') ? 'admin' : 'accountant';
+
       // Tạo tài khoản mới với mật khẩu đã băm SHA-256 (KHÔNG lưu plaintext)
-      const newFacilityId = Date.now();
       const newUser = {
         username: emailLower,
         email: emailLower,
+        role: defaultRole,
         fullName: fullName,
-        role: 'engineer',
-        facilityId: newFacilityId,
-        facility_id: newFacilityId,
         passwordHash: pwdHash,
         createdAt: new Date().toISOString(),
         company: {
-          facilityId: newFacilityId,
-          facility_id: newFacilityId,
           name: finalCompanyName,
           tax: '',
           address: '',

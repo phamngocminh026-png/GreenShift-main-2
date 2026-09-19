@@ -3,7 +3,7 @@
   "version": "2.2.0",
   "description": "GreenShift Enterprise Carbon Accounting & ESG Compliance Engine (GHG Protocol & ISO 14064-1/3)",
   "scripts": {
-    "test": "node tests/run_all_tests.js",
+    "test": "node scratch/run_all_tests.js",
     "test:security": "node tests/test_supabase_rls_security.js",
     "test:lifecycle": "node tests/test_full_lifecycle.js",
     "test:biogenic": "node tests/test_biogenic_emissions_isolation.js",

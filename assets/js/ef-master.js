@@ -527,26 +527,44 @@
      */
     getGWP: function (gasKey, arVersion = 'AR5') {
       if (!gasKey) return 0;
-      const ver = (arVersion || 'AR5').toUpperCase();
+      let ver = String(arVersion || 'AR5').toUpperCase();
+      if (ver.includes('6')) ver = 'AR6';
+      else if (ver.includes('4')) ver = 'AR4';
+      else ver = 'AR5';
+
       const normKey = String(gasKey).toUpperCase().replace(/[^A-Z0-9]/g, '');
 
       // 1. Tra cứu theo bảng phiên bản cụ thể
       const table = INTERNATIONAL_STANDARD.gwp_tables[ver] || INTERNATIONAL_STANDARD.gwp_tables.AR5;
       if (table && table[normKey] !== undefined) return table[normKey];
 
-      // Thử chuẩn hóa tên gas thông dụng
-      if (normKey.includes('134A')) return table.R134A || 1300;
-      if (normKey.includes('410A')) return table.R410A || 1924;
-      if (normKey.includes('227EA') || normKey.includes('FM200')) return table.FM200 || 3350;
-      if (normKey.includes('SF6')) return table.SF6 || 23500;
-      if (normKey.includes('32')) return table.R32 || 677;
+      // Ánh xạ chuẩn hóa chính xác (Exact Canonical Mapping)
+      const CANONICAL_MAP = {
+        'R134A': 'R134A', 'HFC134A': 'R134A', '134A': 'R134A', 'C2H2F4': 'R134A',
+        'R410A': 'R410A', '410A': 'R410A',
+        'R32': 'R32', 'HFC32': 'R32', '32': 'R32', 'CH2F2': 'R32',
+        'R22': 'R22', 'HCFC22': 'R22', '22': 'R22', 'CHCLF2': 'R22',
+        'R404A': 'R404A', '404A': 'R404A',
+        'R407C': 'R407C', '407C': 'R407C',
+        'SF6': 'SF6', 'SULFURHEXAFLUORIDE': 'SF6',
+        'NF3': 'NF3', 'NITROGENTRIFLUORIDE': 'NF3',
+        'FM200': 'FM200', 'HFC227EA': 'FM200', 'R227EA': 'FM200',
+        'CH4': 'CH4', 'METHANE': 'CH4',
+        'N2O': 'N2O', 'NITROUSOXIDE': 'N2O',
+        'CO2': 'CO2'
+      };
 
-      // 2. Tra cứu trong danh mục chi tiết 80+ môi chất lạnh AR6
+      const canon = CANONICAL_MAP[normKey];
+      if (canon && table[canon] !== undefined) {
+        return table[canon];
+      }
+
+      // 2. Tra cứu trong danh mục chi tiết 80+ môi chất lạnh (khớp chính xác)
       const refList = INTERNATIONAL_STANDARD.refrigerants_ar6;
       if (refList) {
         for (const [k, v] of Object.entries(refList)) {
           const kNorm = k.toUpperCase().replace(/[^A-Z0-9]/g, '');
-          if (kNorm.includes(normKey) || normKey.includes(kNorm)) {
+          if (kNorm === normKey) {
             return v.gwp;
           }
         }

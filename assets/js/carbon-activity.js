@@ -1,5 +1,16 @@
-document.addEventListener('DOMContentLoaded', () => {
-  setTimeout(initActivityLogic, 500);
+(function() {
+  let activityLogicInitialized = false;
+  function runInitActivity() {
+    if (activityLogicInitialized) return;
+    activityLogicInitialized = true;
+    initActivityLogic();
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', runInitActivity);
+  } else {
+    runInitActivity();
+  }
 
   function initActivityLogic() {
     const btnAddActivity = document.getElementById('btn-add-activity');
@@ -411,7 +422,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 const srcName = (src.eq || src.type || '').toLowerCase();
                 const targetDaily = Math.round((aQty / 300) * 1000) / 1000;
                 const efNum = parseFloat(src.efFactor) || 60;
-                const efKg = efNum > 5 ? efNum : efNum * 1000;
+                const efUnit = (src.efUnit || src.opCapUnit || '').toLowerCase();
+                const efKg = (efUnit.includes('tco2') || efUnit.includes('tấn co2') || efUnit.includes('t co2')) ? (efNum * 1000) : efNum;
 
                 data.forEach(a => {
                   const isMatch = (srcId && a.sourceId === srcId) || (srcName && a.sourceName && a.sourceName.toLowerCase().includes(srcName));
@@ -466,6 +478,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     function populateSourceDropdowns(filterType, isProductionOnly) {
+      filterType = (typeof filterType === 'string') ? filterType.trim() : '';
       const curUserRole = localStorage.getItem('gs_user_role') || 'engineer';
       sourceSelect.innerHTML = '';
       const defaultText = isProductionOnly
@@ -478,14 +491,19 @@ document.addEventListener('DOMContentLoaded', () => {
 
       // Khi là Kế toán và KHÔNG phải chế độ chốt sản lượng: Thêm nhóm Hạng mục Năng lượng / Nhiên liệu mua ngoài cấp Cơ sở
       if (curUserRole === 'accountant' && !isProductionOnly) {
+        const efMaster = (typeof window !== 'undefined' && window.EF_MASTER) ? window.EF_MASTER : (typeof EF_MASTER !== 'undefined' ? EF_MASTER : null);
+        const vnFuels = efMaster?.VN?.fuels || {};
+        const vnElec = efMaster?.VN?.electricity || {};
+        const getGwpVal = (gas, ar) => (efMaster?.CALC?.getGWP ? efMaster.CALC.getGWP(gas, ar) : 1924);
+
         const facSources = (window.InvoiceParser && window.InvoiceParser.FACILITY_ENERGY_SOURCES) ? window.InvoiceParser.FACILITY_ENERGY_SOURCES : [
-          { id: 'src_fac_diesel', name: 'Dầu Diesel (DO) mua ngoài (Toàn nhà máy / Bồn tổng)', type: 'Đốt cháy cố định', ef: 'Dầu Diesel (DO)', efFactor: '2.6866', efUnit: 'kgCO2e/lít', unit: 'lít', measure: 'volume' },
-          { id: 'src_fac_electricity', name: 'Điện lưới EVN mua ngoài (Tổng công tơ nhà máy)', type: 'Điện mua vào', ef: 'Điện lưới Việt Nam', efFactor: '0.6766', efUnit: 'kgCO2e/kWh', unit: 'kWh', measure: 'volume' },
-          { id: 'src_fac_petrol', name: 'Xăng RON 95 / E5 mua ngoài (Xe công ty & Động cơ nổ)', type: 'Đốt cháy động', ef: 'Xăng', efFactor: '2.3168', efUnit: 'kgCO2e/lít', unit: 'lít', measure: 'volume' },
-          { id: 'src_fac_lpg', name: 'Khí dầu mỏ hóa lỏng LPG mua ngoài (Nhiệt & Bếp công nghiệp)', type: 'Đốt cháy cố định', ef: 'Khí dầu mỏ hóa lỏng (LPG)', efFactor: '2.9830', efUnit: 'kgCO2e/kg', unit: 'kg', measure: 'weight' },
-          { id: 'src_fac_coal', name: 'Than đá / Nhiên liệu rắn mua ngoài (Lò hơi)', type: 'Đốt cháy cố định', ef: 'Than antraxit', efFactor: '2.6220', efUnit: 'kgCO2e/kg', unit: 'kg', measure: 'weight' },
-          { id: 'src_fac_biomass', name: 'Nhiên liệu sinh khối mua ngoài (Củi / Mùn cưa / Trấu / Viên nén)', type: 'Đốt cháy cố định', ef: 'Củi / Dăm gỗ / Mùn cưa', efFactor: '0.0380', efUnit: 'kgCO2e/kg', unit: 'kg', measure: 'weight', biomass: 'Có' },
-          { id: 'src_fac_refrigerant', name: 'Môi chất lạnh nạp bổ sung (R-410A / R-32 - Bảo trì)', type: 'Phát thải thất thoát', ef: 'R-410A', refrigerant: 'R-410A', efFactor: '2088.0', efUnit: 'kgCO2e/kg', unit: 'kg', measure: 'refrigerant' }
+          { id: 'src_fac_diesel', name: 'Dầu Diesel (DO) mua ngoài (Toàn nhà máy / Bồn tổng)', type: 'Đốt cháy cố định', ef: 'Dầu Diesel (DO)', efFactor: String(vnFuels.diesel?.factor || '2.686'), efUnit: 'kgCO2e/lít', unit: 'lít', measure: 'volume' },
+          { id: 'src_fac_electricity', name: 'Điện lưới EVN mua ngoài (Tổng công tơ nhà máy)', type: 'Điện mua vào', ef: 'Điện lưới Việt Nam', efFactor: String(vnElec.grid_kwh?.factor || '0.6766'), efUnit: 'kgCO2e/kWh', unit: 'kWh', measure: 'volume' },
+          { id: 'src_fac_petrol', name: 'Xăng RON 95 / E5 mua ngoài (Xe công ty & Động cơ nổ)', type: 'Đốt cháy động', ef: 'Xăng', efFactor: String(vnFuels.petrol?.factor || '2.271'), efUnit: 'kgCO2e/lít', unit: 'lít', measure: 'volume' },
+          { id: 'src_fac_lpg', name: 'Khí dầu mỏ hóa lỏng LPG mua ngoài (Nhiệt & Bếp công nghiệp)', type: 'Đốt cháy cố định', ef: 'Khí dầu mỏ hóa lỏng (LPG)', efFactor: String(vnFuels.lpg?.factor || '2.983'), efUnit: 'kgCO2e/kg', unit: 'kg', measure: 'weight' },
+          { id: 'src_fac_coal', name: 'Than đá / Nhiên liệu rắn mua ngoài (Lò hơi)', type: 'Đốt cháy cố định', ef: 'Than antraxit', efFactor: String(vnFuels.coal_anthracite?.factor || '2.625'), efUnit: 'kgCO2e/kg', unit: 'kg', measure: 'weight' },
+          { id: 'src_fac_biomass', name: 'Nhiên liệu sinh khối mua ngoài (Củi / Mùn cưa / Trấu / Viên nén)', type: 'Đốt cháy cố định', ef: 'Củi / Dăm gỗ / Mùn cưa', efFactor: String(vnFuels.wood_waste?.factor || '0.038'), efUnit: 'kgCO2e/kg', unit: 'kg', measure: 'weight', biomass: 'Có' },
+          { id: 'src_fac_refrigerant', name: 'Môi chất lạnh nạp bổ sung (R-410A / R-32 - Bảo trì)', type: 'Phát thải thất thoát', ef: 'R-410A', refrigerant: 'R-410A', efFactor: String(getGwpVal('R410A', 'AR5') || '1924'), efUnit: 'kgCO2e/kg', unit: 'kg', measure: 'refrigerant' }
         ];
 
         const facGroup = document.createElement('optgroup');
@@ -1261,7 +1279,8 @@ document.addEventListener('DOMContentLoaded', () => {
     if (inputMeterMult) inputMeterMult.addEventListener('input', calcFromMeter);
 
     const openModal = (filterType, isProductionOnly) => {
-      const currentFilter = filterType || actHiddenFilter.value;
+      const cleanFilter = (typeof filterType === 'string') ? filterType.trim() : '';
+      const currentFilter = cleanFilter || (actHiddenFilter ? actHiddenFilter.value : '');
       const userRole = localStorage.getItem('gs_user_role') || 'engineer';
       
       const docLabel = document.getElementById('label-activity-doc');
@@ -1556,9 +1575,24 @@ document.addEventListener('DOMContentLoaded', () => {
       });
     }
 
-    if (btnAddActivity) btnAddActivity.addEventListener('click', openModal);
-    if (btnCloseActivity) btnCloseActivity.addEventListener('click', closeModal);
-    if (btnCancelActivity) btnCancelActivity.addEventListener('click', closeModal);
+    if (btnAddActivity) {
+      btnAddActivity.addEventListener('click', (e) => {
+        if (e && typeof e.preventDefault === 'function') e.preventDefault();
+        openModal();
+      });
+    }
+    if (btnCloseActivity) {
+      btnCloseActivity.addEventListener('click', (e) => {
+        if (e && typeof e.preventDefault === 'function') e.preventDefault();
+        closeModal();
+      });
+    }
+    if (btnCancelActivity) {
+      btnCancelActivity.addEventListener('click', (e) => {
+        if (e && typeof e.preventDefault === 'function') e.preventDefault();
+        closeModal();
+      });
+    }
 
     if (btnSaveActivity) btnSaveActivity.addEventListener('click', () => {
       if (!activityForm.checkValidity()) {
@@ -3743,6 +3777,8 @@ document.addEventListener('DOMContentLoaded', () => {
     window.updateProductionReminderBanner = updateProductionReminderBanner;
     window.triggerQuickProductionInput = triggerQuickProductionInput;
     window.syncSourceToBaselineActivities = syncSourceToBaselineActivities;
+    window.openActivityModal = openModal;
+    window.closeActivityModal = closeModal;
 
     loadActivityList();
     renderMachineOverview();

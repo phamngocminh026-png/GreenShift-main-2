@@ -1,13 +1,13 @@
 /**
- * GreenShift v2.0 — Supabase Cloud Database Configuration
- * Cấu hình kết nối Cơ sở Dữ liệu Supabase (PostgreSQL)
+ * GreenShift v2.0 - Supabase Cloud Database Configuration
+ * Cau hinh ket noi Co so Du lieu Supabase (PostgreSQL)
  */
 (function() {
   const DEFAULT_CONFIG = {
-    // URL dự án Supabase
-    url: 'https://uvdlqzlpnjwodhngpxyk.supabase.co',
+    // URL du an Supabase (Cau hinh qua localStorage hoac bien moi truong, khong hardcode key san xuat)
+    url: '',
     // Supabase Publishable / Anon API Key
-    anonKey: 'sb_publishable_UNfFJrjAl8tU4xrB_cbowQ_gZKCo66K'
+    anonKey: ''
   };
 
   window.GREENSHIFT_SUPABASE_CONFIG = {
@@ -15,28 +15,30 @@
     anonKey: DEFAULT_CONFIG.anonKey,
 
     getUrl() {
-      const saved = localStorage.getItem('gs_supabase_url');
-      return (saved && saved.trim()) ? saved.trim() : this.url;
+      const saved = (typeof localStorage !== 'undefined') ? localStorage.getItem('gs_supabase_url') : null;
+      return (saved && saved.trim()) ? saved.trim() : (this.url || '');
     },
 
     getKey() {
-      const saved = localStorage.getItem('gs_supabase_key');
-      return (saved && saved.trim()) ? saved.trim() : this.anonKey;
+      const saved = (typeof localStorage !== 'undefined') ? localStorage.getItem('gs_supabase_key') : null;
+      return (saved && saved.trim()) ? saved.trim() : (this.anonKey || '');
     },
 
     setConfig(newUrl, newKey) {
-      if (newUrl !== undefined) {
-        localStorage.setItem('gs_supabase_url', (newUrl || '').trim());
-      }
-      if (newKey !== undefined) {
-        localStorage.setItem('gs_supabase_key', (newKey || '').trim());
+      if (typeof localStorage !== 'undefined') {
+        if (newUrl !== undefined) {
+          localStorage.setItem('gs_supabase_url', (newUrl || '').trim());
+        }
+        if (newKey !== undefined) {
+          localStorage.setItem('gs_supabase_key', (newKey || '').trim());
+        }
       }
     },
 
     isConfigured() {
       const u = this.getUrl();
       const k = this.getKey();
-      return Boolean(u && k && u.startsWith('http') && k.length > 15);
+      return Boolean(u && k && u.startsWith('http') && k.length > 15 && !k.includes('your_'));
     }
   };
 })();

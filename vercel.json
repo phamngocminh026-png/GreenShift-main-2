@@ -2,12 +2,43 @@
   "version": 2,
   "cleanUrls": true,
   "functions": {
-    "api/**/*.py": {
+    "api/index.py": {
       "runtime": "python3.11",
       "maxDuration": 60
+    },
+    "api/*.js": {
+      "maxDuration": 30
     }
   },
   "rewrites": [
+    {
+      "source": "/api/generate-report",
+      "destination": "/api/index.py"
+    },
+    {
+      "source": "/api/generate-internal-report",
+      "destination": "/api/index.py"
+    },
+    {
+      "source": "/api/lookup-default",
+      "destination": "/api/index.py"
+    },
+    {
+      "source": "/api/login",
+      "destination": "/api/index.py"
+    },
+    {
+      "source": "/api/register",
+      "destination": "/api/index.py"
+    },
+    {
+      "source": "/api/save-supplier",
+      "destination": "/api/index.py"
+    },
+    {
+      "source": "/api/suppliers/(.*)",
+      "destination": "/api/index.py"
+    },
     {
       "source": "/api/(.*)",
       "destination": "/api/$1"
@@ -48,6 +79,10 @@
         {
           "key": "Permissions-Policy",
           "value": "camera=(), microphone=(), geolocation=()"
+        },
+        {
+          "key": "Content-Security-Policy",
+          "value": "default-src 'self'; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com https://cdnjs.cloudflare.com; img-src 'self' data: blob: https:; connect-src 'self' https://*.supabase.co wss://*.supabase.co https://*.vercel-storage.com; object-src 'none'; frame-ancestors 'none';"
         }
       ]
     },

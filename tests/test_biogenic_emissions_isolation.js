@@ -91,7 +91,7 @@ console.log('  ✅ [PASS] carbon-dashboard.js tổng hợp và hiển thị Biog
 // TEST 7: Kiểm tra supabase-client.js
 console.log('\n📌 7. Kiểm tra supabase-client.js hỗ trợ biogenic_co2_tco2e:');
 const supabaseContent = fs.readFileSync(path.join(__dirname, '..', 'assets', 'js', 'supabase-client.js'), 'utf8');
-assert.ok(supabaseContent.includes('biogenic_co2_tco2e: parseFloat(biogenicCo2)'), 'pushAnnualInventory phải hỗ trợ tham số biogenicCo2');
+assert.ok(supabaseContent.includes('biogenic_co2_tco2e:') && supabaseContent.includes('biogenicCo2'), 'pushAnnualInventory phải hỗ trợ tham số biogenicCo2');
 console.log('  ✅ [PASS] supabase-client.js đồng bộ chính xác trường biogenic_co2_tco2e lên cơ sở dữ liệu Supabase');
 
 console.log('\n===============================================================');

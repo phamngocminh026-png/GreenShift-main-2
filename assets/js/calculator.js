@@ -52,6 +52,10 @@ const Calculator = {
     let total = 0;
     const breakdown = [];
 
+    // Resolve GWP based on company IPCC AR configuration
+    const arVer = (companyData && (companyData.ipccAR || companyData.arVersion)) ? (companyData.ipccAR || companyData.arVersion) : 'AR5';
+    const getGwpVal = (gas) => (EF_MASTER.CALC && EF_MASTER.CALC.getGWP ? EF_MASTER.CALC.getGWP(gas, arVer) : (EF_MASTER.INTL.gwp[gas] || 1));
+
     // -------------------------------------------------------
     // 1. Fixed combustion
     // -------------------------------------------------------
@@ -124,8 +128,9 @@ const Calculator = {
 
       if (quantity <= 0) return;
 
+      const dynamicGwp = getGwpVal(gasId) || this.num(gas.gwp);
       const emission =
-        (quantity * this.num(gas.gwp)) / 1000;
+        (quantity * dynamicGwp) / 1000;
 
       total += emission;
 
@@ -149,7 +154,7 @@ const Calculator = {
     if (sf6Kg > 0) {
 
       const gwp = this.num(
-        EF_MASTER.INTL.gwp.SF6
+        getGwpVal('SF6')
       );
 
       const emission = (sf6Kg * gwp) / 1000;
@@ -176,7 +181,7 @@ const Calculator = {
     if (fm200Kg > 0) {
 
       const gwp = this.num(
-        EF_MASTER.INTL.gwp.FM200
+        getGwpVal('FM200')
       );
 
       const emission = (fm200Kg * gwp) / 1000;
@@ -246,7 +251,7 @@ const Calculator = {
       let ch4Emission = ((wwTow - wwS) * ef_ww) - wwR;
       if (ch4Emission < 0) ch4Emission = 0;
 
-      const gwp_ch4 = (companyData && companyData.ipccAR === 'AR6-100') ? 27.9 : 28;
+      const gwp_ch4 = getGwpVal('CH4') || ((companyData && companyData.ipccAR === 'AR6-100') ? 27.9 : 28);
       const emission = (ch4Emission * gwp_ch4) / 1000; // tCO2e
       
       total += emission;
@@ -303,7 +308,7 @@ const Calculator = {
 
         emission =
           (n2oKg *
-            this.num(EF_MASTER.INTL.gwp.N2O)) /
+            this.num(getGwpVal('N2O'))) /
           1000;
 
       }
@@ -354,7 +359,7 @@ const Calculator = {
 
         emission =
           (ch4Kg *
-            this.num(EF_MASTER.INTL.gwp.CH4)) /
+            this.num(getGwpVal('CH4'))) /
           1000;
 
       } else if (
@@ -370,7 +375,7 @@ const Calculator = {
 
         emission =
           (n2o *
-            this.num(EF_MASTER.INTL.gwp.N2O)) /
+            this.num(getGwpVal('N2O'))) /
           1000;
       }
 
@@ -535,8 +540,21 @@ const Calculator = {
 
     }
 
+    // Market-based Scope 2 calculation
+    const recKwh = this.num(inputs.s2_rec_kwh || inputs.s2_irec_kwh);
+    const ppaKwh = this.num(inputs.s2_ppa_kwh || inputs.s2_dppa_kwh);
+    const greenKwh = Math.min(kwh, recKwh + ppaKwh);
+    const remainingKwh = Math.max(0, kwh - greenKwh);
+    const residualFactor = this.num(inputs.s2_residual_mix_ef || (electricityEF ? electricityEF.factor : 0.6766));
+    const greenFactor = this.num(inputs.s2_green_ef || 0);
+    const marketElecEm = ((remainingKwh * residualFactor) + (greenKwh * greenFactor)) / 1000;
+    const steamEm = (steam > 0 && steamEF) ? (steam * this.num(steamEF.factor)) / 1000 : 0;
+    const marketTotal = marketElecEm + steamEm;
+
     return {
       total: this.round(total),
+      locationBased: this.round(total),
+      marketBased: this.round(marketTotal),
       breakdown
     };
   },
@@ -545,13 +563,16 @@ const Calculator = {
   // SCOPE 3
   // // =========================================================
 
-  calcScope3(inputs) {
+  calcScope3(inputs, companyData = {}) {
 
     let total = 0;
 
     const breakdown = [];
 
     const byCat = {};
+
+    const arVer = (companyData && (companyData.ipccAR || companyData.arVersion)) ? (companyData.ipccAR || companyData.arVersion) : 'AR5';
+    const getGwpVal = (gas) => (EF_MASTER.CALC && EF_MASTER.CALC.getGWP ? EF_MASTER.CALC.getGWP(gas, arVer) : (EF_MASTER.INTL.gwp[gas] || 1));
 
     // -------------------------------------------------------
     // Cat.1 Purchased goods/services
@@ -604,8 +625,66 @@ const Calculator = {
     );
 
     // -------------------------------------------------------
-    // Cat.3 Fuel & energy related activities
+    // Cat.3 Fuel & energy related activities (T&D Losses & WTT Fuels)
     // -------------------------------------------------------
+
+    const cat3Factors = EF_MASTER.INTL.fuel_energy_activities_cat3 || {};
+    const tdFactor = cat3Factors.evn_grid_td_loss?.factor || 0.0406;
+    const gridKwhCat3 = this.num(inputs.s3c3_grid_kwh || inputs.s3c3_electricity_kwh || inputs.s2_grid_kwh || 0);
+    if (gridKwhCat3 > 0) {
+      const tdEm = (gridKwhCat3 * tdFactor) / 1000;
+      total += tdEm;
+      this.addCategory(byCat, 3, tdEm);
+      breakdown.push({
+        source: 'Tổn thất truyền tải & phân phối điện lưới EVN (Scope 3 Cat.3)',
+        category: 3,
+        quantity: gridKwhCat3,
+        unit: 'kWh',
+        emission: tdEm
+      });
+    }
+
+    const wttDieselQty = this.num(inputs.s3c3_diesel_liters);
+    if (wttDieselQty > 0) {
+      const wttEm = (wttDieselQty * (cat3Factors.wtt_diesel?.factor || 0.608)) / 1000;
+      total += wttEm;
+      this.addCategory(byCat, 3, wttEm);
+      breakdown.push({
+        source: 'WTT Khai thác & chế biến Dầu Diesel (Cat.3)',
+        category: 3,
+        quantity: wttDieselQty,
+        unit: 'lít',
+        emission: wttEm
+      });
+    }
+
+    const wttPetrolQty = this.num(inputs.s3c3_petrol_liters);
+    if (wttPetrolQty > 0) {
+      const wttEm = (wttPetrolQty * (cat3Factors.wtt_petrol?.factor || 0.584)) / 1000;
+      total += wttEm;
+      this.addCategory(byCat, 3, wttEm);
+      breakdown.push({
+        source: 'WTT Khai thác & chế biến Xăng (Cat.3)',
+        category: 3,
+        quantity: wttPetrolQty,
+        unit: 'lít',
+        emission: wttEm
+      });
+    }
+
+    const wttCoalQty = this.num(inputs.s3c3_coal_kg);
+    if (wttCoalQty > 0) {
+      const wttEm = (wttCoalQty * (cat3Factors.wtt_coal?.factor || 0.350)) / 1000;
+      total += wttEm;
+      this.addCategory(byCat, 3, wttEm);
+      breakdown.push({
+        source: 'WTT Khai thác & vận chuyển Than đá (Cat.3)',
+        category: 3,
+        quantity: wttCoalQty,
+        unit: 'kg',
+        emission: wttEm
+      });
+    }
 
     total += this.addActivityOrDirectCategory(
       inputs,
@@ -632,7 +711,9 @@ const Calculator = {
     // -------------------------------------------------------
 
     const waste =
-      EF_MASTER.INTL.waste_and_wastewater || {};
+      (EF_MASTER.VN && EF_MASTER.VN.waste_and_wastewater) ||
+      EF_MASTER.INTL.waste_and_wastewater ||
+      {};
 
     const wasteMappings = [
       [
@@ -663,7 +744,7 @@ const Calculator = {
 
         const emission =
           (ch4 *
-            this.num(EF_MASTER.INTL.gwp.CH4)) /
+            this.num(getGwpVal('CH4'))) /
           1000;
 
         total += emission;
@@ -1077,10 +1158,32 @@ const Calculator = {
       this.calcScope1(inputs, companyData);
 
     const s2 =
-      this.calcScope2(inputs);
+      this.calcScope2(inputs, companyData);
 
     const s3 =
-      this.calcScope3(inputs);
+      this.calcScope3(inputs, companyData);
+
+    // Áp dụng Tỷ lệ sở hữu (Equity Share) khi phương pháp hợp nhất là equity_share
+    const isEquityShare = (companyData.consolidation_approach === 'EQUITY_SHARE' || 
+                           companyData.consolidationApproach === 'EQUITY_SHARE' ||
+                           companyData.consolidation_approach === 'equity_share' || 
+                           companyData.consolidationApproach === 'equity_share');
+    const equityPct = this.num(companyData.equity_share_pct || companyData.equitySharePct || 100);
+    const equityFactor = (isEquityShare && equityPct > 0 && equityPct <= 100) ? (equityPct / 100) : 1;
+
+    if (equityFactor < 1) {
+      s1.total = this.round(s1.total * equityFactor);
+      s2.total = this.round(s2.total * equityFactor);
+      if (s2.locationBased !== undefined) s2.locationBased = this.round(s2.locationBased * equityFactor);
+      if (s2.marketBased !== undefined) s2.marketBased = this.round(s2.marketBased * equityFactor);
+      s3.total = this.round(s3.total * equityFactor);
+      s1.breakdown.forEach(b => { b.emission = this.round(b.emission * equityFactor); });
+      s2.breakdown.forEach(b => { b.emission = this.round(b.emission * equityFactor); });
+      s3.breakdown.forEach(b => { b.emission = this.round(b.emission * equityFactor); });
+      if (s3.byCat) {
+        Object.keys(s3.byCat).forEach(k => { s3.byCat[k] = this.round(s3.byCat[k] * equityFactor); });
+      }
+    }
 
     const totalGHG =
       s1.total +
@@ -1128,8 +1231,12 @@ const Calculator = {
     return {
       scope1: this.round(s1.total),
       scope2: this.round(s2.total),
+      scope2_location_based: this.round(s2.locationBased !== undefined ? s2.locationBased : s2.total),
+      scope2_market_based: this.round(s2.marketBased !== undefined ? s2.marketBased : s2.total),
+      marketBasedScope2: this.round(s2.marketBased !== undefined ? s2.marketBased : s2.total),
       scope3: this.round(s3.total),
       total: this.round(totalGHG),
+      equityShareApplied: equityFactor < 1 ? equityPct : 100,
       uncertainty: totalUncertainty,
       breakdown: allBreakdown,
       scope3ByCat: s3.byCat,
@@ -1436,4 +1543,9 @@ const Calculator = {
 
 };
 
-window.Calculator = Calculator;
+if (typeof window !== 'undefined') {
+  window.Calculator = Calculator;
+}
+if (typeof module !== 'undefined' && module.exports) {
+  module.exports = Calculator;
+}

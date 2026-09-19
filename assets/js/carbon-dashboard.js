@@ -127,7 +127,7 @@ function renderDashboard() {
   let activities = JSON.parse(localStorage.getItem(storageKey) || '[]');
   if (activities.length === 0) {
     const rawKey = `gs_data_${rawUser}_${branchKey}_activity`;
-    const altKeys = [rawKey, `gs_data_${userSlug}_tru_so_chinh_activity`, `gs_data_${rawUser}_tru_so_chinh_activity`, `gs_data_guest_tru_so_chinh_activity`, `gs_v2_activity_main`];
+    const altKeys = [rawKey, `gs_data_${userSlug}_tru_so_chinh_activity`, `gs_data_${rawUser}_tru_so_chinh_activity`];
     for (const ak of altKeys) {
       const cand = JSON.parse(localStorage.getItem(ak) || '[]');
       if (cand && cand.length > 0) { activities = cand; break; }
@@ -145,7 +145,7 @@ function renderDashboard() {
   let sources = JSON.parse(localStorage.getItem(`gs_data_${userSlug}_${branchKey}_sources`) || '[]');
   if (sources.length === 0) {
     const rawKey = `gs_data_${rawUser}_${branchKey}_sources`;
-    const altKeys = [rawKey, `gs_data_${userSlug}_tru_so_chinh_sources`, `gs_data_${rawUser}_tru_so_chinh_sources`, `gs_data_guest_tru_so_chinh_sources`];
+    const altKeys = [rawKey, `gs_data_${userSlug}_tru_so_chinh_sources`, `gs_data_${rawUser}_tru_so_chinh_sources`];
     for (const ak of altKeys) {
       const cand = JSON.parse(localStorage.getItem(ak) || '[]');
       if (cand && cand.length > 0) { sources = cand; break; }

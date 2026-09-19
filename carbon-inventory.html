@@ -2736,26 +2736,7 @@
                    localStorage.getItem(`gs_data_${userSlug}_tru_so_chinh_equipment`) ||
                    localStorage.getItem(getBranchStorageKey('equipment'));
 
-      if (!stored || stored === '[]') {
-        const altKeys = [
-          `gs_data_guest_${branchKey}_equipment`,
-          `gs_data_admin_${branchKey}_equipment`
-        ];
-        for (const ak of altKeys) {
-          const val = localStorage.getItem(ak);
-          if (val && val !== '[]') {
-            stored = val;
-            localStorage.setItem(getBranchStorageKey('equipment'), val);
-            break;
-          }
-        }
-      }
-      if (!stored || stored === '[]') {
-        if (typeof window.checkAndSeedSampleData === 'function') {
-          window.checkAndSeedSampleData();
-          stored = localStorage.getItem(getBranchStorageKey('equipment'));
-        }
-      }
+      // Clean equipment load without cross-user leak
       if (stored) {
         try {
           const eqData = JSON.parse(stored);
@@ -2967,26 +2948,7 @@
                    localStorage.getItem(`gs_data_${userSlug}_tru_so_chinh_sources`) ||
                    localStorage.getItem(getBranchStorageKey('sources'));
 
-      if (!stored || stored === '[]') {
-        const altKeys = [
-          `gs_data_guest_${branchKey}_sources`,
-          `gs_data_admin_${branchKey}_sources`
-        ];
-        for (const ak of altKeys) {
-          const val = localStorage.getItem(ak);
-          if (val && val !== '[]') {
-            stored = val;
-            localStorage.setItem(getBranchStorageKey('sources'), val);
-            break;
-          }
-        }
-      }
-      if (!stored || stored === '[]') {
-        if (typeof window.checkAndSeedSampleData === 'function') {
-          window.checkAndSeedSampleData();
-          stored = localStorage.getItem(getBranchStorageKey('sources'));
-        }
-      }
+      // Clean sources load without cross-user leak
       if (!stored) return;
       try {
         const sourceData = JSON.parse(stored);
@@ -3748,47 +3710,13 @@
     };
 
     window.checkAndSeedSampleData = function(force = false) {
-      const rawUser = (localStorage.getItem('gs_current_user') || 'guest').trim();
-      const userSlug = rawUser.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '') || 'guest';
-      const branchEl = document.getElementById('branch-selector');
-      const branchName = (branchEl && branchEl.value) ? branchEl.value : 'main';
-      const branchKey = branchName.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '') || 'main';
-
-      const keyEq = getBranchStorageKey('equipment');
-      const keySrc = getBranchStorageKey('sources');
-      const keyAct = getBranchStorageKey('activity');
-
-      const curEq = localStorage.getItem(keyEq);
-      const curSrc = localStorage.getItem(keySrc);
-      const curAct = localStorage.getItem(keyAct);
-
-      if (!force && curEq && curEq !== '[]' && curSrc && curSrc !== '[]' && curAct && curAct !== '[]') {
-        return false;
-      }
-
-      // Kiểm tra xem tài khoản khác (guest, admin, v.v.) có dữ liệu sẵn để đồng bộ không
-      const candidates = ['guest', 'admin', 'phamngocminh026', 'phamngocminh026@gmail.com', rawUser];
-      for (const u of candidates) {
-        const uSlug = u.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
-        if (u === rawUser && uSlug === userSlug) continue;
-        const candEq = localStorage.getItem(`gs_data_${u}_${branchKey}_equipment`) || localStorage.getItem(`gs_data_${uSlug}_${branchKey}_equipment`);
-        if (candEq && candEq !== '[]') {
-          localStorage.setItem(keyEq, candEq);
-          const candSrc = localStorage.getItem(`gs_data_${u}_${branchKey}_sources`) || localStorage.getItem(`gs_data_${uSlug}_${branchKey}_sources`);
-          if (candSrc) localStorage.setItem(keySrc, candSrc);
-          const candAct = localStorage.getItem(`gs_data_${u}_${branchKey}_activity`) || localStorage.getItem(`gs_data_${uSlug}_${branchKey}_activity`);
-          if (candAct) localStorage.setItem(keyAct, candAct);
-          return true;
-        }
-      }
-
-      // Khởi tạo bộ mẫu nhà máy thép hoàn chỉnh
-      return window.seedSteelPlantSampleData(force);
+      if (!force) return false;
+      return window.seedSteelPlantSampleData(true);
     };
 
     // Tự động kiểm tra và nạp ngay dữ liệu kiểm thử nếu chưa có
     try {
-      window.checkAndSeedSampleData(false);
+      // Auto-seed disabled for true multi-tenant customer onboarding
       if (typeof loadEquipmentList === 'function') loadEquipmentList();
       if (typeof loadSourceList === 'function') loadSourceList();
     } catch (e) {}
@@ -5868,7 +5796,7 @@
               const k2 = `gs_data_${userStr}_${bKey}_activity`;
               let acts = JSON.parse(localStorage.getItem(k1) || localStorage.getItem(k2) || '[]');
               if (acts.length === 0) {
-                const candKeys = [`gs_data_guest_${bKey}_activity`, `gs_data_admin_${bKey}_activity`];
+                const candKeys = [];
                 for (const ck of candKeys) {
                   const c = JSON.parse(localStorage.getItem(ck) || '[]');
                   if (c.length > 0) { acts = c; break; }
@@ -5985,7 +5913,7 @@
               const k2 = `gs_data_${userStr}_${bKey}_activity`;
               let acts = JSON.parse(localStorage.getItem(k1) || localStorage.getItem(k2) || '[]');
               if (acts.length === 0) {
-                const candKeys = [`gs_data_guest_${bKey}_activity`, `gs_data_admin_${bKey}_activity`];
+                const candKeys = [];
                 for (const ck of candKeys) {
                   const c = JSON.parse(localStorage.getItem(ck) || '[]');
                   if (c.length > 0) { acts = c; break; }

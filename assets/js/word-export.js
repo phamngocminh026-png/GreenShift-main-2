@@ -675,7 +675,7 @@ const WordExport = {
           const rawKey = `gs_data_${userStr}_${branchKey}_activity`;
           activities = JSON.parse(localStorage.getItem(storageKey) || localStorage.getItem(rawKey) || '[]');
           if (activities.length === 0) {
-            const candKeys = [`gs_data_${userSlug}_tru_so_chinh_activity`, `gs_data_${userStr}_tru_so_chinh_activity`, `gs_data_guest_tru_so_chinh_activity`];
+            const candKeys = [`gs_data_${userSlug}_tru_so_chinh_activity`, `gs_data_${userStr}_tru_so_chinh_activity`];
             for (const ck of candKeys) {
               const cand = JSON.parse(localStorage.getItem(ck) || '[]');
               if (cand.length > 0) { activities = cand; break; }

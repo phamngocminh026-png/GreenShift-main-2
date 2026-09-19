@@ -427,26 +427,7 @@
                    localStorage.getItem(`gs_data_${userSlug}_tru_so_chinh_activity`) ||
                    localStorage.getItem(getBranchStorageKey('activity'));
 
-      if (!stored || stored === '[]') {
-        const candKeys = [
-          `gs_data_guest_${branchKey}_activity`,
-          `gs_data_admin_${branchKey}_activity`
-        ];
-        for (const ck of candKeys) {
-          const val = localStorage.getItem(ck);
-          if (val && val !== '[]') {
-            stored = val;
-            localStorage.setItem(getBranchStorageKey('activity'), val);
-            break;
-          }
-        }
-      }
-      if (!stored || stored === '[]') {
-        if (typeof window.checkAndSeedSampleData === 'function') {
-          window.checkAndSeedSampleData();
-          stored = localStorage.getItem(getBranchStorageKey('activity'));
-        }
-      }
+      // Clean activity load without cross-user leak
       if (!stored) return;
       try {
         let data = JSON.parse(stored);
@@ -2675,7 +2656,7 @@
               `gs_data_${rawUser}_tru_so_chinh_sources`, 
               `gs_data_${userSlug}_tru_so_chinh_sources`, 
               `gs_data_${rawUser}_main_sources`, 
-              `gs_data_guest_tru_so_chinh_sources`
+              
             ];
             for (const ak of altKeys) {
               const raw = localStorage.getItem(ak);
@@ -3203,7 +3184,7 @@
             const branchEl = document.getElementById('branch-selector');
             const branchName = (branchEl && branchEl.value) ? branchEl.value : 'main';
             const branchKey = branchName.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '') || 'main';
-            const altKeys = [`gs_data_${rawUser}_${branchKey}_sources`, `gs_data_${rawUser}_tru_so_chinh_sources`, `gs_data_${rawUser}_main_sources`, `gs_data_guest_tru_so_chinh_sources`];
+            const altKeys = [`gs_data_${rawUser}_${branchKey}_sources`, `gs_data_${rawUser}_tru_so_chinh_sources`, `gs_data_${rawUser}_main_sources`, ];
             for (const ak of altKeys) {
               const raw = localStorage.getItem(ak);
               if (raw && raw !== '[]') {

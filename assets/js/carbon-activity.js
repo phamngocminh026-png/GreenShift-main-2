@@ -42,14 +42,37 @@
     let actSelectedL1 = null;
     let actSelectedL2 = null;
 
+    let _lastFilterToggle = 0;
+    window.toggleActivityCustomFilter = function(e) {
+      if (e && typeof e.stopPropagation === 'function') e.stopPropagation();
+      const now = Date.now();
+      if (now - _lastFilterToggle < 300) return;
+      _lastFilterToggle = now;
+      const dropdown = document.getElementById('activity-custom-filter-dropdown') || actFilterDropdown;
+      const container = document.getElementById('act-custom-select-container') || (dropdown ? dropdown.parentElement : null);
+      if (!dropdown) return;
+      dropdown.classList.toggle('open');
+      const isOpen = dropdown.classList.contains('open');
+      if (container) {
+        container.style.zIndex = isOpen ? '1060' : '';
+      }
+      if (isOpen && typeof renderActCol1 === 'function') {
+        renderActCol1();
+      }
+    };
+
     if (actFilterInput) {
-      actFilterInput.addEventListener('click', (e) => {
+      actFilterInput.onclick = function(e) {
         window.toggleActivityCustomFilter(e);
-      });
+      };
 
       document.addEventListener('click', (e) => {
-        if (!actFilterInput.contains(e.target) && !actFilterDropdown.contains(e.target)) {
-          actFilterDropdown.classList.remove('open');
+        const input = document.getElementById('activity-custom-filter-input') || actFilterInput;
+        const dropdown = document.getElementById('activity-custom-filter-dropdown') || actFilterDropdown;
+        if (input && dropdown && !input.contains(e.target) && !dropdown.contains(e.target)) {
+          dropdown.classList.remove('open');
+          const container = document.getElementById('act-custom-select-container') || dropdown.parentElement;
+          if (container) container.style.zIndex = '';
         }
       });
     }
@@ -63,20 +86,22 @@
           const userSlug = username.trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '') || 'guest';
           const branchEl = document.getElementById('branch-selector');
           const branchName = (branchEl && branchEl.value) ? branchEl.value : 'main';
-          const branchKey = branchName.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '');
+          const branchKey = branchName.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '') || 'main';
           const stored = localStorage.getItem(getBranchStorageKey('sources')) ||
                          localStorage.getItem(`gs_data_${userSlug}_${branchKey}_sources`) ||
                          localStorage.getItem(`gs_data_${username}_${branchKey}_sources`);
           if (stored) {
             const list = JSON.parse(stored);
-            list.forEach(item => {
-              const scope = (typeof getScopeInfo === 'function') ? getScopeInfo(item.category, item.ef, item.type).label : (item.scope || 'Phạm vi 1');
-              const cat = item.category || 'Khác';
-              const type = item.type || item.name || '';
-              if (!tree[scope]) tree[scope] = {};
-              if (!tree[scope][cat]) tree[scope][cat] = new Set();
-              if (type) tree[scope][cat].add(type);
-            });
+            if (Array.isArray(list)) {
+              list.forEach(item => {
+                const scope = (typeof getScopeInfo === 'function') ? getScopeInfo(item.category, item.ef, item.type).label : (item.scope || 'Phạm vi 1');
+                const cat = item.category || 'Khác';
+                const type = item.type || item.name || '';
+                if (!tree[scope]) tree[scope] = {};
+                if (!tree[scope][cat]) tree[scope][cat] = new Set();
+                if (type) tree[scope][cat].add(type);
+              });
+            }
             if (Object.keys(tree).length > 0) return tree;
           }
         } catch(e) {}
@@ -84,7 +109,7 @@
       sourceRows.forEach(row => {
         const scope = (row.cells[0]?.textContent || '').trim() || 'Phạm vi 1';
         const category = row.dataset.category || (row.cells[1]?.textContent || '').trim() || 'Khác';
-        const type = row.dataset.type || '';
+        const type = row.dataset.type || row.dataset.name || row.dataset.sourceType || (row.cells[2]?.textContent || '').trim();
         if (!tree[scope]) tree[scope] = {};
         if (!tree[scope][category]) tree[scope][category] = new Set();
         if (type) tree[scope][category].add(type);
@@ -95,16 +120,19 @@
         try {
           const actStored = localStorage.getItem(getBranchStorageKey('activity'));
           if (actStored) {
-            const acts = JSON.parse(actStored);
-            acts.forEach(a => {
-              const type = a.sourceType || a.sourceName || 'Tiêu thụ chung';
-              const isElec = type.includes('điện') || type.includes('Điện');
-              const scope = isElec ? 'Phạm vi 2' : 'Phạm vi 1';
-              const cat = isElec ? 'Tiêu thụ điện' : (type.includes('công nghiệp') ? 'Các quá trình công nghiệp' : 'Đốt cháy cố định');
-              if (!tree[scope]) tree[scope] = {};
-              if (!tree[scope][cat]) tree[scope][cat] = new Set();
-              tree[scope][cat].add(type);
-            });
+            let rawParsed = JSON.parse(actStored);
+            let acts = (typeof decodeActivitiesData === 'function') ? decodeActivitiesData(rawParsed) : (Array.isArray(rawParsed) ? rawParsed : []);
+            if (Array.isArray(acts)) {
+              acts.forEach(a => {
+                const type = a.sourceType || a.sourceName || 'Tiêu thụ chung';
+                const isElec = type.includes('điện') || type.includes('Điện');
+                const scope = isElec ? 'Phạm vi 2' : 'Phạm vi 1';
+                const cat = isElec ? 'Tiêu thụ điện' : (type.includes('công nghiệp') ? 'Các quá trình công nghiệp' : 'Đốt cháy cố định');
+                if (!tree[scope]) tree[scope] = {};
+                if (!tree[scope][cat]) tree[scope][cat] = new Set();
+                tree[scope][cat].add(type);
+              });
+            }
           }
         } catch(e) {}
       }
@@ -121,9 +149,13 @@
     }
 
     function renderActCol1() {
-      actCol1.innerHTML = '';
-      actCol2.innerHTML = '';
-      actCol3.innerHTML = '';
+      const col1 = document.getElementById('act-col-1') || actCol1;
+      const col2 = document.getElementById('act-col-2') || actCol2;
+      const col3 = document.getElementById('act-col-3') || actCol3;
+      if (!col1) return;
+      col1.innerHTML = '';
+      if (col2) col2.innerHTML = '';
+      if (col3) col3.innerHTML = '';
       
       const tree = getDynamicTree();
       const scopes = Object.keys(tree);
@@ -131,13 +163,21 @@
       const clearDiv = document.createElement('div');
       clearDiv.className = 'dropdown-item';
       clearDiv.innerHTML = '<span>-- Tất cả Nguồn --</span>';
-      clearDiv.onclick = () => {
-        actFilterInput.innerText = '-- Tất cả Nguồn phát thải --';
-        actHiddenFilter.value = '';
-        actFilterDropdown.classList.remove('open');
+      clearDiv.onclick = (e) => {
+        if (e && typeof e.stopPropagation === 'function') e.stopPropagation();
+        const input = document.getElementById('activity-custom-filter-input') || actFilterInput;
+        const hidden = document.getElementById('activity-source-filter') || actHiddenFilter;
+        const dd = document.getElementById('activity-custom-filter-dropdown') || actFilterDropdown;
+        if (input) input.innerText = '-- Tất cả Nguồn --';
+        if (hidden) hidden.value = '';
+        if (dd) {
+          dd.classList.remove('open');
+          const container = document.getElementById('act-custom-select-container') || dd.parentElement;
+          if (container) container.style.zIndex = '';
+        }
         applyFilter('');
       };
-      actCol1.appendChild(clearDiv);
+      col1.appendChild(clearDiv);
 
       if (scopes.length === 0) {
         return;
@@ -147,46 +187,64 @@
         const div = document.createElement('div');
         div.className = 'dropdown-item';
         div.innerHTML = `<span>${scope}</span><span class="arrow">></span>`;
-        div.onclick = () => {
-          Array.from(actCol1.children).forEach(c => c.classList.remove('active'));
+        div.onclick = (e) => {
+          if (e && typeof e.stopPropagation === 'function') e.stopPropagation();
+          Array.from(col1.children).forEach(c => c.classList.remove('active'));
           div.classList.add('active');
           actSelectedL1 = scope;
           renderActCol2(tree[scope]);
         };
-        actCol1.appendChild(div);
+        col1.appendChild(div);
       });
     }
 
     function renderActCol2(categoriesObj) {
-      actCol2.innerHTML = '';
-      actCol3.innerHTML = '';
+      const col2 = document.getElementById('act-col-2') || actCol2;
+      const col3 = document.getElementById('act-col-3') || actCol3;
+      if (!col2) return;
+      col2.innerHTML = '';
+      if (col3) col3.innerHTML = '';
+      if (!categoriesObj) return;
       Object.keys(categoriesObj).forEach(cat => {
         const div = document.createElement('div');
         div.className = 'dropdown-item';
         div.innerHTML = `<span>${cat}</span><span class="arrow">></span>`;
-        div.onclick = () => {
-          Array.from(actCol2.children).forEach(c => c.classList.remove('active'));
+        div.onclick = (e) => {
+          if (e && typeof e.stopPropagation === 'function') e.stopPropagation();
+          Array.from(col2.children).forEach(c => c.classList.remove('active'));
           div.classList.add('active');
           actSelectedL2 = cat;
-          renderActCol3(Array.from(categoriesObj[cat]));
+          const items = categoriesObj[cat] instanceof Set ? Array.from(categoriesObj[cat]) : (Array.isArray(categoriesObj[cat]) ? categoriesObj[cat] : []);
+          renderActCol3(items);
         };
-        actCol2.appendChild(div);
+        col2.appendChild(div);
       });
     }
 
     function renderActCol3(typesArr) {
-      actCol3.innerHTML = '';
+      const col3 = document.getElementById('act-col-3') || actCol3;
+      if (!col3) return;
+      col3.innerHTML = '';
+      if (!Array.isArray(typesArr)) return;
       typesArr.forEach(type => {
         const div = document.createElement('div');
         div.className = 'dropdown-item';
         div.innerHTML = `<span>${type}</span>`;
-        div.onclick = () => {
-          actFilterInput.innerText = type;
-          actHiddenFilter.value = type;
-          actFilterDropdown.classList.remove('open');
+        div.onclick = (e) => {
+          if (e && typeof e.stopPropagation === 'function') e.stopPropagation();
+          const input = document.getElementById('activity-custom-filter-input') || actFilterInput;
+          const hidden = document.getElementById('activity-source-filter') || actHiddenFilter;
+          const dd = document.getElementById('activity-custom-filter-dropdown') || actFilterDropdown;
+          if (input) input.innerText = type;
+          if (hidden) hidden.value = type;
+          if (dd) {
+            dd.classList.remove('open');
+            const container = document.getElementById('act-custom-select-container') || dd.parentElement;
+            if (container) container.style.zIndex = '';
+          }
           applyFilter(type);
         };
-        actCol3.appendChild(div);
+        col3.appendChild(div);
       });
     }
 
@@ -952,7 +1010,7 @@
         const isCombustion = (cat === 'Đốt cháy cố định' || cat === 'Đốt cháy động' || cat === 'Đốt cháy di động');
         const isFugitive = (cat === 'Phát thải thất thoát');
 
-        // Nguồn Quá trình công nghiệp (Scope 1 - IPPU): TUYỆT ĐỐI KHÔNG BAO GỒM TIÊU THỤ ĐIỆN VÀ ĐỐT NHIÊN LIỆU
+        // Nguồn Quá trình công nghiệp (Scope 1 - IPPU): TUYỆT ĐỐI KHÔNG BAO GỒM TIÊU THỤ ĐIỆN VÀ ĐỐT NHIỆU LIỆU
         let isProc = false;
         if (!isElectricity && !isCombustion && !isFugitive) {
           isProc = (row.dataset.isProcessEmission === 'true' || 
@@ -962,7 +1020,7 @@
                     type.includes('quá trình công nghiệp') || type.includes('thổi oxy') || type.includes('luyện thép'));
         }
 
-        // Khi ở chế độ Chốt sản lượng ca/ngày, TUYỆT ĐỐI CHỈ hiển thị các nguồn Quá trình công nghiệp (Scope 1 - IPPU)
+        // Khi ở chế độ Chốt sản lượng ca/ngày, TUỆT ĐỐI CHỈ hiển thị các nguồn Quá trình công nghiệp (Scope 1 - IPPU)
         if (isProductionOnly && !isProc) return;
         
         // Lọc linh hoạt: Khớp theo tên Loại thiết bị hoặc Danh mục nguồn (ví dụ Đốt cháy cố định)
@@ -2436,25 +2494,28 @@
 
       // Hiển thị thứ trong tuần (CN, T7, T2..T6) để kỹ sư dễ nhận biết ngày nghỉ
       let dateDisplay = data.date || '';
-      if (data.date && data.date.includes('-')) {
-        const parts = data.date.split('-');
+      if (data.date) {
+        const normDate = data.date.trim().replace(/[ /]/g, '-');
+        const parts = normDate.split('-');
         if (parts.length === 3) {
-          const dObj = new Date(parseInt(parts[0]), parseInt(parts[1]) - 1, parseInt(parts[2]));
-          const dow = dObj.getDay();
-          const dayLabels = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'];
-          const dowLabel = dayLabels[dow];
-          if (dow === 0) {
-            dateDisplay = `${data.date} <span style="display:inline-block; margin-left: 4px; padding: 1px 5px; border-radius: 4px; font-size: 0.68rem; font-weight: 700; background: #fee2e2; color: #dc2626;" title="Chủ nhật (Ngày nghỉ tuần)">CN</span>`;
-          } else if (dow === 6) {
-            dateDisplay = `${data.date} <span style="display:inline-block; margin-left: 4px; padding: 1px 5px; border-radius: 4px; font-size: 0.68rem; font-weight: 700; background: #fef3c7; color: #d97706;" title="Thứ 7">T7</span>`;
-          } else {
-            dateDisplay = `${data.date} <span style="display:inline-block; margin-left: 4px; padding: 1px 5px; border-radius: 4px; font-size: 0.68rem; color: #64748b; background: #f1f5f9;">${dowLabel}</span>`;
+          const dObj = new Date(parseInt(parts[0], 10), parseInt(parts[1], 10) - 1, parseInt(parts[2], 10));
+          if (!isNaN(dObj.getTime())) {
+            const dow = dObj.getDay();
+            const dayLabels = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'];
+            const dowLabel = dayLabels[dow];
+            if (dow === 0) {
+              dateDisplay = `${normDate} <span style="display:inline-block; margin-left: 4px; padding: 1px 5px; border-radius: 4px; font-size: 0.68rem; font-weight: 700; background: #fee2e2; color: #dc2626;" title="Chủ nhật (Ngày nghỉ tuần)">CN</span>`;
+            } else if (dow === 6) {
+              dateDisplay = `${normDate} <span style="display:inline-block; margin-left: 4px; padding: 1px 5px; border-radius: 4px; font-size: 0.68rem; font-weight: 700; background: #fef3c7; color: #d97706;" title="Thứ 7">T7</span>`;
+            } else {
+              dateDisplay = `${normDate} <span style="display:inline-block; margin-left: 4px; padding: 1px 5px; border-radius: 4px; font-size: 0.68rem; color: #64748b; background: #f1f5f9;" title="Thứ ${dow + 1}">${dowLabel}</span>`;
+            }
           }
         }
       }
 
       tr.innerHTML = `
-        <td style="padding:0.45rem 0.55rem; white-space: nowrap; font-size: 0.78rem; overflow: visible;">${dateDisplay}</td>
+        <td style="width: 138px; min-width: 138px; padding:0.45rem 0.55rem; white-space: nowrap; font-size: 0.78rem; overflow: visible;">${dateDisplay}</td>
         <td style="padding:0.45rem 0.55rem; font-size: 0.78rem; font-weight: 500;">${data.sourceName}</td>
         <td style="padding:0.45rem 0.55rem; text-align: right; font-size: 0.78rem; color: #475569;">
           ${data.finalFactor ? parseFloat(Number(data.finalFactor).toFixed(4)) : '0'}
@@ -4377,20 +4438,6 @@
       if (!menu) return;
       const isOpen = menu.style.display === 'block';
       menu.style.display = isOpen ? 'none' : 'block';
-    };
-
-    let _lastFilterToggle = 0;
-    window.toggleActivityCustomFilter = function(e) {
-      if (e && typeof e.stopPropagation === 'function') e.stopPropagation();
-      const now = Date.now();
-      if (now - _lastFilterToggle < 300) return;
-      _lastFilterToggle = now;
-      const dropdown = document.getElementById('activity-custom-filter-dropdown') || actFilterDropdown;
-      if (!dropdown) return;
-      dropdown.classList.toggle('open');
-      if (dropdown.classList.contains('open') && typeof renderActCol1 === 'function') {
-        renderActCol1();
-      }
     };
 
     window.loadActivityList = loadActivityList;

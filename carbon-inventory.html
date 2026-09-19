@@ -124,6 +124,7 @@
     #activity-table-card table {
       table-layout: fixed;
       width: 100%;
+      min-width: 1100px;
     }
     #activity-tbody tr {
       content-visibility: auto;
@@ -134,17 +135,17 @@
       text-overflow: ellipsis;
       word-break: break-word;
     }
-    #activity-table-card th:nth-child(1), #activity-table-card td:nth-child(1) { width: 138px; }
+    #activity-table-card th:nth-child(1), #activity-table-card td:nth-child(1) { width: 138px; min-width: 138px; }
     #activity-table-card td:nth-child(1) { overflow: visible; }
-    #activity-table-card th:nth-child(2), #activity-table-card td:nth-child(2) { width: 16%; }
-    #activity-table-card th:nth-child(3), #activity-table-card td:nth-child(3) { width: 7%; }
-    #activity-table-card th:nth-child(4), #activity-table-card td:nth-child(4) { width: 8%; }
-    #activity-table-card th:nth-child(5), #activity-table-card td:nth-child(5) { width: 6%; }
-    #activity-table-card th:nth-child(6), #activity-table-card td:nth-child(6) { width: 11%; }
-    #activity-table-card th:nth-child(7), #activity-table-card td:nth-child(7) { width: 9%; }
+    #activity-table-card th:nth-child(2), #activity-table-card td:nth-child(2) { width: 15%; }
+    #activity-table-card th:nth-child(3), #activity-table-card td:nth-child(3) { width: 6%; }
+    #activity-table-card th:nth-child(4), #activity-table-card td:nth-child(4) { width: 7%; }
+    #activity-table-card th:nth-child(5), #activity-table-card td:nth-child(5) { width: 5%; }
+    #activity-table-card th:nth-child(6), #activity-table-card td:nth-child(6) { width: 10%; }
+    #activity-table-card th:nth-child(7), #activity-table-card td:nth-child(7) { width: 8%; }
     #activity-table-card th:nth-child(8), #activity-table-card td:nth-child(8) { width: 13%; }
-    #activity-table-card th:nth-child(9), #activity-table-card td:nth-child(9) { width: 9%; }
-    #activity-table-card th:nth-child(10), #activity-table-card td:nth-child(10) { width: 9%; }
+    #activity-table-card th:nth-child(9), #activity-table-card td:nth-child(9) { width: 8%; }
+    #activity-table-card th:nth-child(10), #activity-table-card td:nth-child(10) { width: 8%; }
     #activity-table-card th:nth-child(11), #activity-table-card td:nth-child(11) { width: 68px; }
 
     
@@ -414,6 +415,8 @@
       font-size: 0.8rem;
     }
 
+      #activity-table-card th:nth-child(1), #activity-table-card td:nth-child(1) { width: 138px; }
+    #activity-table-card td:nth-child(1) { overflow: visible; }
   </style>
 
   <!-- Chart.js for Dashboard (Local Vendor - Offline Ready) -->
@@ -855,7 +858,7 @@
                 <span id="text-toggle-emission-map">Hiện bản đồ phát thải</span>
               </button>
               <button type="button" id="btn-reset-src-data" class="btn btn-secondary" style="background: #fff1f2; color: #be123c; border: 1px solid #fecdd3; font-size: 0.85rem; padding: 0.5rem 0.9rem; border-radius: 6px; cursor: pointer;" title="Xóa dữ liệu hoạt động, thiết bị và nguồn để kiểm thử lại từ đầu">
-                Đặt lại dữ liệu test
+                Đặt lại dữ liệu
               </button>
             </div>
           </div>
@@ -1057,7 +1060,7 @@
                  <span>Đối soát thiết bị</span>
                </button>
                <button type="button" id="btn-reset-eq-data" class="btn btn-secondary" style="background: #fff1f2; color: #be123c; border: 1px solid #fecdd3; font-size: 0.85rem; padding: 0.5rem 0.9rem; border-radius: 6px; cursor: pointer; white-space: nowrap;" title="Xóa dữ liệu hoạt động, thiết bị và nguồn để kiểm thử lại từ đầu">
-                 Đặt lại dữ liệu test
+                 Đặt lại dữ liệu
                </button>
                <button id="btn-add-equipment" class="btn btn-primary" style="display: inline-flex; align-items: center; gap: 4px; font-size: 0.85rem; padding: 0.5rem 0.9rem; border-radius: 6px; cursor: pointer;">+ Thêm thiết bị</button>
              </div>
@@ -1214,7 +1217,7 @@
               </select>
 
               <!-- Lọc theo Nguồn phát thải -->
-              <div class="custom-select-container" style="min-width: 200px; max-width: 280px; position: relative;">
+              <div class="custom-select-container" id="act-custom-select-container" style="min-width: 200px; max-width: 280px; position: relative;">
                 <div class="custom-select-input" id="activity-custom-filter-input" onclick="if(typeof window.toggleActivityCustomFilter==='function') window.toggleActivityCustomFilter(event);" style="height: 34px; font-size: 0.78rem; display: flex; align-items: center; cursor: pointer;">-- Tất cả Nguồn --</div>
                 <div class="custom-select-dropdown" id="activity-custom-filter-dropdown" style="position: absolute; top: 100%; left: 0; width: 560px; max-width: min(560px, calc(100vw - 320px)); z-index: 1050; box-shadow: 0 10px 25px rgba(0,0,0,0.15);">
                   <div class="dropdown-col" id="act-col-1" style="min-width: 170px;"></div>
@@ -1243,7 +1246,7 @@
               <!-- Nhóm nút hành động bên phải -->
               <div style="display: flex; gap: 8px; align-items: center;">
                 <button type="button" id="btn-quick-log-production" onclick="if(typeof window.triggerQuickProductionInput==='function') window.triggerQuickProductionInput();" class="btn btn-secondary" style="font-size: 0.82rem; font-weight: 600; padding: 0.42rem 0.95rem; background: #fff7ed; color: #c2410c; border: 1px solid #fdba74; white-space: nowrap;" title="Ghi nhận nhanh sản lượng phôi thép / sản phẩm ca ngày hôm nay">Chốt sản lượng ca/ngày</button>
-                <button type="button" id="btn-reset-test-data" class="btn btn-secondary" style="font-size: 0.78rem; padding: 0.38rem 0.75rem; background: #fff1f2; color: #be123c; border: 1px solid #fecdd3; white-space: nowrap;" title="Xóa dữ liệu hoạt động, thiết bị và nguồn phát thải đã lưu để kiểm thử lại từ đầu">Đặt lại dữ liệu test</button>
+                <button type="button" id="btn-reset-test-data" class="btn btn-secondary" style="font-size: 0.78rem; padding: 0.38rem 0.75rem; background: #fff1f2; color: #be123c; border: 1px solid #fecdd3; white-space: nowrap;" title="Xóa dữ liệu hoạt động, thiết bị và nguồn phát thải đã lưu để kiểm thử lại từ đầu">Đặt lại dữ liệu</button>
                 <button id="btn-add-activity" class="btn btn-primary" onclick="if(typeof window.openActivityModal==='function') window.openActivityModal();" style="font-size: 0.82rem; font-weight: 600; padding: 0.42rem 1.1rem; white-space: nowrap; box-shadow: 0 1px 2px rgba(0,0,0,0.1);">+ Thêm Dữ liệu hoạt động</button>
               </div>
             </div>
@@ -4282,7 +4285,7 @@
 
       try {
         const dlToast = document.createElement('div');
-        dlToast.textContent = '📥 Đã tải file mẫu về máy! Bạn có thể chỉnh sửa rồi bấm "Tải thiết bị", hoặc bấm "Nạp mẫu chuẩn" / "Đặt lại dữ liệu test" để nạp trực tiếp vào hệ thống.';
+        dlToast.textContent = '📥 Đã tải file mẫu về máy! Bạn có thể chỉnh sửa rồi bấm "Tải thiết bị", hoặc bấm "Nạp mẫu chuẩn" / "Đặt lại dữ liệu" để nạp trực tiếp vào hệ thống.';
         dlToast.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#0284c7;color:#fff;padding:12px 24px;border-radius:8px;font-size:0.85rem;z-index:99999;box-shadow:0 4px 16px rgba(0,0,0,0.2);max-width:90%;text-align:center;line-height:1.4;';
         document.body.appendChild(dlToast);
         setTimeout(() => dlToast.remove(), 4500);

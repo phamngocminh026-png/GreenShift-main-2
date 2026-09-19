@@ -3,13 +3,38 @@
   "cleanUrls": true,
   "functions": {
     "api/index.py": {
-      "maxDuration": 60
+      "maxDuration": 60,
+      "includeFiles": "templates/**, data/reference/**, *.html"
     },
     "api/*.js": {
       "maxDuration": 30
     }
   },
   "rewrites": [
+    {
+      "source": "/login",
+      "destination": "/login.html"
+    },
+    {
+      "source": "/carbon-inventory",
+      "destination": "/carbon-inventory.html"
+    },
+    {
+      "source": "/cbam-dashboard",
+      "destination": "/cbam-dashboard.html"
+    },
+    {
+      "source": "/setup",
+      "destination": "/setup.html"
+    },
+    {
+      "source": "/supplier",
+      "destination": "/supplier.html"
+    },
+    {
+      "source": "/about",
+      "destination": "/about.html"
+    },
     {
       "source": "/api/generate-report",
       "destination": "/api/index.py"

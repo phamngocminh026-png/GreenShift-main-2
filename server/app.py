@@ -482,17 +482,28 @@ def serve_legacy_libs(filename):
     return send_from_directory(os.path.join(ASSETS_DIR, 'vendor'), filename)
 
 ALLOWED_ROOT_FILES = {
-    '', 'index.html', 'carbon-inventory.html', 'cbam-dashboard.html',
-    'login.html', 'setup.html', 'supplier.html', 'about.html', 'favicon.ico'
+    '', 'index', 'index.html',
+    'carbon-inventory', 'carbon-inventory.html',
+    'cbam-dashboard', 'cbam-dashboard.html',
+    'login', 'login.html',
+    'setup', 'setup.html',
+    'supplier', 'supplier.html',
+    'about', 'about.html',
+    'favicon.ico'
 }
 
 @app.route('/', defaults={'path': ''})
 @app.route('/<path:path>')
 def serve_static(path):
     clean_path = path.strip('/')
+    if not clean_path or clean_path in ('index', 'index.html'):
+        return send_from_directory(PROJECT_ROOT, 'index.html')
+    
     if clean_path in ALLOWED_ROOT_FILES:
-        filename = 'index.html' if clean_path == '' else clean_path
-        return send_from_directory(PROJECT_ROOT, filename)
+        filename = clean_path if (clean_path.endswith('.html') or '.' in clean_path) else f'{clean_path}.html'
+        file_path = os.path.join(PROJECT_ROOT, filename)
+        if os.path.exists(file_path):
+            return send_from_directory(PROJECT_ROOT, filename)
     return jsonify({'error': 'Not Found'}), 404
 
 

@@ -2327,29 +2327,26 @@
         if (!currentEditingRow && isProcess) {
           const rows = tbody.querySelectorAll('tr:not(#no-activity-row)');
           for (const r of rows) {
-            if (r.dataset.date === date && (r.dataset.sourceId === sourceId || r.dataset.sourceName === sourceName) && r.dataset.isBaseline === 'true') {
-              existingBaselineRow = r;
-              break;
+            if (r.dataset.date === date && (r.dataset.sourceId === sourceId || r.dataset.sourceName === sourceName)) {
+              const rType = (r.dataset.recordType || '').toLowerCase();
+              const rUnit = (r.dataset.unit || '').toLowerCase();
+              if (rType === 'actual_production' || r.dataset.isProcessEmission === 'true' || rUnit.includes('tấn') || r.dataset.isBaseline === 'true') {
+                existingBaselineRow = r;
+                if (rType === 'actual_production' || r.dataset.isBaseline !== 'true') break; // Ưu tiên dòng thực tế
+              }
             }
           }
         }
 
-        if (currentEditingRow) {
-          dataObj.createdAt = currentEditingRow.dataset.createdAt;
-          if (!dataObj.docId && currentEditingRow.dataset.docId) dataObj.docId = currentEditingRow.dataset.docId;
-          if (!dataObj.fileUrl && currentEditingRow.dataset.fileUrl) dataObj.fileUrl = currentEditingRow.dataset.fileUrl;
-          if (!dataObj.fileType && currentEditingRow.dataset.fileType) dataObj.fileType = currentEditingRow.dataset.fileType;
-          Object.assign(currentEditingRow.dataset, dataObj);
-          updateRowHTML(currentEditingRow, dataObj);
+        const targetRowToUpdate = currentEditingRow || existingBaselineRow;
+        if (targetRowToUpdate) {
+          dataObj.createdAt = targetRowToUpdate.dataset.createdAt || dataObj.createdAt;
+          if (!dataObj.docId && targetRowToUpdate.dataset.docId) dataObj.docId = targetRowToUpdate.dataset.docId;
+          if (!dataObj.fileUrl && targetRowToUpdate.dataset.fileUrl) dataObj.fileUrl = targetRowToUpdate.dataset.fileUrl;
+          if (!dataObj.fileType && targetRowToUpdate.dataset.fileType) dataObj.fileType = targetRowToUpdate.dataset.fileType;
+          Object.assign(targetRowToUpdate.dataset, dataObj);
+          updateRowHTML(targetRowToUpdate, dataObj);
           currentEditingRow = null;
-          window._currentUploadedDoc = null;
-        } else if (existingBaselineRow) {
-          dataObj.createdAt = existingBaselineRow.dataset.createdAt;
-          if (!dataObj.docId && existingBaselineRow.dataset.docId) dataObj.docId = existingBaselineRow.dataset.docId;
-          if (!dataObj.fileUrl && existingBaselineRow.dataset.fileUrl) dataObj.fileUrl = existingBaselineRow.dataset.fileUrl;
-          if (!dataObj.fileType && existingBaselineRow.dataset.fileType) dataObj.fileType = existingBaselineRow.dataset.fileType;
-          Object.assign(existingBaselineRow.dataset, dataObj);
-          updateRowHTML(existingBaselineRow, dataObj);
           window._currentUploadedDoc = null;
         } else {
           document.getElementById('no-activity-row')?.remove();
@@ -2457,14 +2454,11 @@
 
       const logDetailHTML = `<span style="color: #334155;">${cleanDoc || '—'}</span>`;
 
-      // Cột 9: Chứng từ / Tệp đính kèm (Hoàn toàn độc lập, cho phép mở xem/tải tệp chứng từ gốc)
+      // Cột 9: Chứng từ / Tệp đính kèm (Chỉ hiển thị khi có tệp thực tế được tải lên)
       let docFileHTML = '';
-      if (data.fileName || data.docId) {
-        const displayDocName = data.fileName || 'Chứng từ đính kèm';
+      if (data.fileName || data.docId || data.fileUrl) {
+        const displayDocName = data.fileName || 'Tệp đính kèm';
         docFileHTML = `<button type="button" class="btn-view-proof" style="display:inline-flex; align-items: center; gap: 4px; max-width: 145px; background: #eff6ff; border: 1px solid #bfdbfe; color: #1d4ed8; padding: 2px 7px; border-radius: 4px; font-size: 0.72rem; cursor: pointer; text-align: left; font-weight: 500;" title="Nhấp để xem hoặc tải tệp chứng từ: ${displayDocName}"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0;"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line></svg><span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${displayDocName}</span></button>`;
-      } else if (isInvoice && (data.docNo || (cleanDoc && !cleanDoc.includes('Ca chuẩn') && !cleanDoc.includes('Vận hành')))) {
-        const docLabel = data.docNo || cleanDoc;
-        docFileHTML = `<button type="button" class="btn-view-proof" style="display:inline-flex; align-items: center; gap: 4px; max-width: 145px; background: #f0fdf4; border: 1px solid #bbf7d0; color: #15803d; padding: 2px 7px; border-radius: 4px; font-size: 0.72rem; cursor: pointer; text-align: left; font-weight: 500;" title="Nhấp để xem chứng từ kế toán: ${docLabel}"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink: 0;"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" y1="13" x2="8" y2="13"></line><line x1="16" y1="17" x2="8" y2="17"></line></svg><span style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${docLabel}</span></button>`;
       } else {
         docFileHTML = '<span style="color: #94a3b8;">—</span>';
       }
@@ -4368,12 +4362,54 @@
         }
 
         const amountInput = document.getElementById('activity-amount');
+        const targetSrcId = targetOption ? targetOption.value : '';
+        const targetSrcName = targetOption ? targetOption.text : '';
+
+        // Tự động kiểm tra và gắn kết dòng sản lượng đã chốt trước đó (nếu có) để kỹ sư sửa trực tiếp
+        function bindExistingProductionRow(targetDate) {
+          const rows = tbody.querySelectorAll('tr:not(#no-activity-row)');
+          let foundRow = null;
+          for (const r of rows) {
+            if (r.dataset.date === targetDate && (r.dataset.sourceId === targetSrcId || r.dataset.sourceName === targetSrcName)) {
+              const rType = (r.dataset.recordType || '').toLowerCase();
+              const rUnit = (r.dataset.unit || '').toLowerCase();
+              if (rType === 'actual_production' || r.dataset.isProcessEmission === 'true' || rUnit.includes('tấn') || r.dataset.isBaseline === 'true') {
+                foundRow = r;
+                if (rType === 'actual_production' || r.dataset.isBaseline !== 'true') break;
+              }
+            }
+          }
+          if (foundRow) {
+            currentEditingRow = foundRow;
+            const amt = parseFloat(foundRow.dataset.amount);
+            if (!isNaN(amt) && amt > 0 && foundRow.dataset.isBaseline !== 'true') {
+              if (amountInput) amountInput.value = amt;
+            } else {
+              if (amountInput) amountInput.value = '';
+            }
+            if (foundRow.dataset.doc && docInput) {
+              docInput.value = foundRow.dataset.doc;
+            }
+          } else {
+            currentEditingRow = null;
+            if (amountInput) amountInput.value = '';
+          }
+        }
+
+        bindExistingProductionRow(dateInput?.value || new Date().toISOString().slice(0, 10));
+
+        if (dateInput) {
+          dateInput.onchange = function() {
+            bindExistingProductionRow(dateInput.value);
+          };
+        }
+
         if (amountInput) {
-          amountInput.value = '';
           amountInput.placeholder = `Ví dụ: ${qDayPlaceholder} (tấn/ngày)`;
           amountInput.readOnly = false;
           amountInput.style.background = '#ffffff';
           amountInput.focus();
+          if (amountInput.value) amountInput.select();
         }
       }, 100);
     }

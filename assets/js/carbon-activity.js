@@ -2344,6 +2344,10 @@
             finalDoc = fileName ? `Hóa đơn / Tệp: ${fileName}` : 'Hóa đơn mua ngoài / Nhập kho';
           } else if (isProcess) {
             finalDoc = 'Phiếu cân ca máy - Nghiệm thu phôi thép';
+          } else if (currentActMode === 'meter') {
+            const mStart = inputMeterStart?.value || '';
+            const mEnd = inputMeterEnd?.value || '';
+            finalDoc = (mStart && mEnd) ? `Chốt chỉ số công tơ (Đầu: ${mStart} - Cuối: ${mEnd})` : 'Chốt chỉ số công tơ ca máy';
           } else if (isDowntime) {
             const dtH = parseFloat(document.getElementById('input-op-hours')?.value) || 0;
             finalDoc = `Bảo trì / Giảm trừ ${dtH}h ca máy`;
@@ -2363,6 +2367,9 @@
           wwS: isWW ? wwS : 0, wwR: isWW ? wwR : 0,
           entryRole: userRole,
           entryMode: isProcess ? 'direct' : currentActMode,
+          meterStart: currentActMode === 'meter' ? (inputMeterStart?.value || '') : (currentEditingRow?.dataset?.meterStart || ''),
+          meterEnd: currentActMode === 'meter' ? (inputMeterEnd?.value || '') : (currentEditingRow?.dataset?.meterEnd || ''),
+          meterMultiplier: currentActMode === 'meter' ? (inputMeterMult?.value || '1') : (currentEditingRow?.dataset?.meterMultiplier || '1'),
           timeStart: isProcess ? '' : timeStart,
           timeEnd: isProcess ? '' : timeEnd,
           isInvoice: isInvoice ? 'true' : 'false',
@@ -2475,6 +2482,8 @@
         statusBadgeHTML = '<span style="display:inline-block; font-size: 0.72rem; font-weight: 600; background: #f0fdf4; color: #166534; border: 1px solid #bbf7d0; padding: 2px 7px; border-radius: 12px; white-space: nowrap;">Tăng ca (+)</span>';
       } else if (isActualProd) {
         statusBadgeHTML = '<span style="display:inline-block; font-size: 0.72rem; font-weight: 700; background: #ecfdf5; color: #047857; border: 1px solid #a7f3d0; padding: 2px 8px; border-radius: 12px; white-space: nowrap;">Đã chốt SL</span>';
+      } else if (data.entryMode === 'meter' || Boolean(data.meterStart) || (data.doc && (data.doc.toLowerCase().includes('công tơ') || data.doc.toLowerCase().includes('đồng hồ')))) {
+        statusBadgeHTML = '<span style="display:inline-block; font-size: 0.72rem; font-weight: 600; background: #f0f9ff; color: #0284c7; border: 1px solid #bae6fd; padding: 2px 7px; border-radius: 12px; white-space: nowrap;">Đo công tơ</span>';
       } else if (data.isBaseline === 'true') {
         statusBadgeHTML = '<span style="display:inline-block; font-size: 0.72rem; font-weight: 500; background: #f8fafc; color: #64748b; border: 1px solid #e2e8f0; padding: 2px 7px; border-radius: 12px; white-space: nowrap;">Định mức</span>';
       } else if (isInvoice) {
@@ -2711,63 +2720,79 @@
             if (managerInput) managerInput.value = data.manager || '';
             if (fileLabel) fileLabel.innerText = 'Đính kèm Phiếu cân / Nhật ký ca máy (Ảnh, PDF)';
           } else if (userRole !== 'accountant') {
-            // Khôi phục tính chất Dừng máy hay Vận hành chuẩn hay Có tăng ca
-            const isRowDowntime = (data.isDowntime === 'true' || data.recordType === 'downtime' || 
-                                  ((docLower.includes('dừng máy') || docLower.includes('sự cố dừng') || docLower.includes('ngừng hoạt động') || docLower.includes('dừng lò') || (docLower.includes('bảo trì') && !docLower.includes('nạp gas') && !docLower.includes('vận hành') && !docLower.includes('chạy thử') && parseFloat(data.amount) <= 0))) &&
-                                  !docLower.includes('vận hành thực tế'));
-            const isRowOvertime = (data.isOvertime === 'true' || data.recordType === 'overtime' || docLower.includes('tăng ca'));
-            let recordTypeVal = 'normal';
-            if (isRowDowntime) recordTypeVal = 'downtime';
-            else if (isRowOvertime) recordTypeVal = 'overtime';
+            const selectedOpt = sourceSelect.options[sourceSelect.selectedIndex];
+            const isMeterMode = (data.entryMode === 'meter') || Boolean(data.meterStart) ||
+                                (docLower.includes('công tơ') || docLower.includes('đồng hồ')) ||
+                                (selectedOpt && (selectedOpt.dataset.measure === 'Đo liên tục' || selectedOpt.dataset.meterId));
 
-            const radTarget = document.querySelector(`input[name="act-record-type"][value="${recordTypeVal}"]`);
-            if (radTarget) {
-              radTarget.checked = true;
-              radTarget.dispatchEvent(new Event('change'));
-            }
+            if (isMeterMode) {
+              const groupActMode = document.getElementById('group-act-mode');
+              if (groupActMode) groupActMode.style.display = 'block';
+              switchActivityInputMode('meter');
+              if (inputMeterStart) inputMeterStart.value = data.meterStart || '';
+              if (inputMeterEnd) inputMeterEnd.value = data.meterEnd || '';
+              if (inputMeterMult) inputMeterMult.value = data.meterMultiplier || selectedOpt?.dataset?.meterMultiplier || '1';
+              if (data.meterStart && data.meterEnd) {
+                calcFromMeter();
+              }
+            } else {
+              // Khôi phục tính chất Dừng máy hay Vận hành chuẩn hay Có tăng ca
+              const isRowDowntime = (data.isDowntime === 'true' || data.recordType === 'downtime' || 
+                                    ((docLower.includes('dừng máy') || docLower.includes('sự cố dừng') || docLower.includes('ngừng hoạt động') || docLower.includes('dừng lò') || (docLower.includes('bảo trì') && !docLower.includes('nạp gas') && !docLower.includes('vận hành') && !docLower.includes('chạy thử') && parseFloat(data.amount) <= 0))) &&
+                                    !docLower.includes('vận hành thực tế'));
+              const isRowOvertime = (data.isOvertime === 'true' || data.recordType === 'overtime' || docLower.includes('tăng ca'));
+              let recordTypeVal = 'normal';
+              if (isRowDowntime) recordTypeVal = 'downtime';
+              else if (isRowOvertime) recordTypeVal = 'overtime';
 
-            // Điền số giờ tương ứng vào ô nhập
-            const opHoursInput = document.getElementById('input-op-hours');
-            if (opHoursInput) {
-              if (recordTypeVal === 'downtime') {
-                let dtHours = parseFloat(data.downtimeHours);
-                if (isNaN(dtHours) || dtHours <= 0) {
-                  const m = (data.doc || '').match(/(\d+(?:\.\d+)?)\s*h/i);
-                  dtHours = m ? parseFloat(m[1]) : 4;
-                }
-                opHoursInput.value = dtHours;
-              } else if (recordTypeVal === 'overtime') {
-                let otHours = parseFloat(data.overtimeHours);
-                if (isNaN(otHours) || otHours <= 0) {
-                  const m = (data.doc || '').match(/\+(\d+(?:\.\d+)?)\s*h/i);
-                  otHours = m ? parseFloat(m[1]) : 2;
-                }
-                opHoursInput.value = otHours;
-              } else {
-                let stdH = parseFloat(data.stdHours) || parseFloat(data.opHours);
-                if (isNaN(stdH) || stdH <= 0) {
-                  const m = (data.doc || '').match(/(\d+(?:\.\d+)?)\s*h/i);
-                  stdH = m ? parseFloat(m[1]) : 16;
-                }
-                opHoursInput.value = stdH;
+              const radTarget = document.querySelector(`input[name="act-record-type"][value="${recordTypeVal}"]`);
+              if (radTarget) {
+                radTarget.checked = true;
+                radTarget.dispatchEvent(new Event('change'));
               }
-            }
-            if (inputOpRate) {
-              const selectedOpt = sourceSelect.options[sourceSelect.selectedIndex];
-              let rRate = data.hourlyRate || selectedOpt?.dataset?.hourlyRate;
-              if (!rRate || parseFloat(rRate) <= 0) {
-                const cap = parseFloat(selectedOpt?.dataset?.opCapacity) || 0;
-                const load = (parseFloat(selectedOpt?.dataset?.opLoad) || 80) / 100;
-                if (cap > 0) rRate = Math.round(cap * load * 100) / 100;
-                else {
-                  const stdH = parseFloat(data.stdHours) || parseFloat(selectedOpt?.dataset?.opHoursDay) || 16;
-                  const stdAmt = parseFloat(data.stdAmount) || parseFloat(data.amount) || 0;
-                  if (stdH > 0 && stdAmt > 0) rRate = Math.round((stdAmt / stdH) * 100) / 100;
+
+              // Điền số giờ tương ứng vào ô nhập
+              const opHoursInput = document.getElementById('input-op-hours');
+              if (opHoursInput) {
+                if (recordTypeVal === 'downtime') {
+                  let dtHours = parseFloat(data.downtimeHours);
+                  if (isNaN(dtHours) || dtHours <= 0) {
+                    const m = (data.doc || '').match(/(\d+(?:\.\d+)?)\s*h/i);
+                    dtHours = m ? parseFloat(m[1]) : 4;
+                  }
+                  opHoursInput.value = dtHours;
+                } else if (recordTypeVal === 'overtime') {
+                  let otHours = parseFloat(data.overtimeHours);
+                  if (isNaN(otHours) || otHours <= 0) {
+                    const m = (data.doc || '').match(/\+(\d+(?:\.\d+)?)\s*h/i);
+                    otHours = m ? parseFloat(m[1]) : 2;
+                  }
+                  opHoursInput.value = otHours;
+                } else {
+                  let stdH = parseFloat(data.stdHours) || parseFloat(data.opHours);
+                  if (isNaN(stdH) || stdH <= 0) {
+                    const m = (data.doc || '').match(/(\d+(?:\.\d+)?)\s*h/i);
+                    stdH = m ? parseFloat(m[1]) : 16;
+                  }
+                  opHoursInput.value = stdH;
                 }
               }
-              inputOpRate.value = rRate || '';
+              if (inputOpRate) {
+                let rRate = data.hourlyRate || selectedOpt?.dataset?.hourlyRate;
+                if (!rRate || parseFloat(rRate) <= 0) {
+                  const cap = parseFloat(selectedOpt?.dataset?.opCapacity) || 0;
+                  const load = (parseFloat(selectedOpt?.dataset?.opLoad) || 80) / 100;
+                  if (cap > 0) rRate = Math.round(cap * load * 100) / 100;
+                  else {
+                    const stdH = parseFloat(data.stdHours) || parseFloat(selectedOpt?.dataset?.opHoursDay) || 16;
+                    const stdAmt = parseFloat(data.stdAmount) || parseFloat(data.amount) || 0;
+                    if (stdH > 0 && stdAmt > 0) rRate = Math.round((stdAmt / stdH) * 100) / 100;
+                  }
+                }
+                inputOpRate.value = rRate || '';
+              }
+              calcFromHours();
             }
-            calcFromHours();
           } else {
             // Đảm bảo các thành phần kỹ thuật luôn ẩn khi kế toán chỉnh sửa
             if (panelHours) panelHours.style.display = 'none';
@@ -3398,6 +3423,7 @@
       const actRowData = [];
       let invoiceElectricity = 0;
       let invoiceFuel = 0;
+      let invoiceRef = 0;
       const currentActiveRole = localStorage.getItem('gs_user_role') || 'engineer';
 
       actRows.forEach(ar => {
@@ -3430,7 +3456,12 @@
                           entryRole !== 'engineer';
 
         if (isInvoice) {
-          if (type.includes('điện') || type.includes('dien') || unit === 'kwh' || sourceName.includes('điện') || sourceName.includes('dien') || sourceName.includes('chiller')) {
+          const isRefInvoice = (type.includes('rò rỉ') || type.includes('môi chất') || type.includes('gas lạnh') ||
+                               doc.includes('r-410a') || doc.includes('r-134a') || doc.includes('r-22') || doc.includes('r-32') || doc.includes('fm-200') ||
+                               doc.includes('gas lạnh') || doc.includes('nạp gas') || doc.includes('môi chất lạnh') || doc.includes('khí nạp'));
+          if (isRefInvoice) {
+            invoiceRef += amt;
+          } else if (type.includes('điện') || type.includes('dien') || unit === 'kwh' || sourceName.includes('điện') || sourceName.includes('dien') || (sourceName.includes('chiller') && unit === 'kwh')) {
             invoiceElectricity += amt;
           } else {
             invoiceFuel += amt;
@@ -3440,6 +3471,7 @@
 
       let machineElectricity = 0;
       let machineFuel = 0;
+      let machineRef = 0;
       const machineSources = getMachineSources();
 
       machineSources.forEach(ms => {
@@ -3471,7 +3503,9 @@
         const actualQty = Math.max(0, Math.round((baseAnnual + totalAdjustmentQty) * 1000) / 1000);
         const capUnit = (ms.capUnit || '').toLowerCase();
         const type = (ms.type || '').toLowerCase();
-        if (capUnit === 'kwh' || capUnit === 'kw' || type.includes('điện') || type.includes('dien')) {
+        if (isFugitive) {
+          machineRef += actualQty;
+        } else if (capUnit === 'kwh' || capUnit === 'kw' || type.includes('điện') || type.includes('dien')) {
           machineElectricity += actualQty;
         } else {
           machineFuel += actualQty;
@@ -3481,6 +3515,7 @@
       // Nếu xem theo tháng: lấy mức ước tính 1 tháng (annual / 12)
       const compElectricity = isMonth ? Math.round((machineElectricity / 12) * 100) / 100 : machineElectricity;
       const compFuel = isMonth ? Math.round((machineFuel / 12) * 100) / 100 : machineFuel;
+      const compRef = isMonth ? Math.round((machineRef / 12) * 100) / 100 : machineRef;
 
       const categories = [];
       if (invoiceElectricity > 0 || compElectricity > 0) {
@@ -3505,6 +3540,20 @@
           name: 'Nhiên liệu đốt (lít / kg)',
           invoice: invoiceFuel,
           equipment: compFuel,
+          delta,
+          ratio,
+          status: ratio <= 5.0 ? 'RECONCILED' : 'WARNING_PENDING_REVIEW'
+        });
+      }
+
+      if (invoiceRef > 0 || compRef > 0) {
+        const delta = Math.round((invoiceRef - compRef) * 100) / 100;
+        const base = compRef > 0 ? compRef : invoiceRef;
+        const ratio = base > 0 ? Math.round((Math.abs(delta) / base) * 1000) / 10 : 0;
+        categories.push({
+          name: 'Khí nạp / Môi chất lạnh (kg)',
+          invoice: invoiceRef,
+          equipment: compRef,
           delta,
           ratio,
           status: ratio <= 5.0 ? 'RECONCILED' : 'WARNING_PENDING_REVIEW'
@@ -3792,6 +3841,14 @@
       let createdCount = 0;
       const now = new Date().toISOString().slice(0, 10) + ' ' + new Date().toTimeString().slice(0, 5);
 
+      const meterTracker = {};
+      machineSources.forEach(src => {
+        if (src.measure === 'Đo liên tục' || Boolean(src.meterId)) {
+          const sKey = src.id || src.eq || src.type;
+          meterTracker[sKey] = parseFloat(src.initialMeter) || 120500;
+        }
+      });
+
       monthsToProcess.forEach(m => {
         const mStr = String(m).padStart(2, '0');
         const daysInThisMonth = daysInMonths[m - 1];
@@ -3809,6 +3866,8 @@
                              Boolean(src.refrigerant);
           const isWastewater = (src.category && src.category.toLowerCase().includes('nước thải')) ||
                                (src.type && src.type.toLowerCase().includes('nước thải'));
+          const isContinuousMeter = (src.measure === 'Đo liên tục' || Boolean(src.meterId));
+          const meterMult = parseFloat(src.meterMultiplier) || 1;
 
           if (isProc) {
             if (src.annualEstQty <= 0) return; // Chỉ phân bổ khi có kế hoạch sản lượng năm
@@ -3948,6 +4007,22 @@
               if (dWeek === 6 && dayOfWeek === 0) continue;
             }
 
+            let curDocStr = docStr;
+            let curMeterStart = '';
+            let curMeterEnd = '';
+            if (isContinuousMeter) {
+              const sKey = src.id || src.eq || src.type;
+              const curStart = meterTracker[sKey] || 120500;
+              const mult = (meterMult > 0) ? meterMult : 1;
+              const deltaIdx = Math.round((dailyQty / mult) * 100) / 100;
+              const curEnd = curStart + deltaIdx;
+              meterTracker[sKey] = curEnd;
+              curMeterStart = Math.round(curStart).toString();
+              curMeterEnd = Math.round(curEnd).toString();
+              const mCode = src.meterId ? `[${src.meterId}] ` : '';
+              curDocStr = `Chốt công tơ ${mCode}(Đầu: ${Math.round(curStart).toLocaleString('vi-VN')} - Cuối: ${Math.round(curEnd).toLocaleString('vi-VN')})`;
+            }
+
             const dStr = String(d).padStart(2, '0');
             const dateStr = `${curYear}-${mStr}-${dStr}`;
 
@@ -3960,7 +4035,7 @@
               sourceName: sourceDisplayName,
               amount: dailyQty,
               unit: unitName,
-              doc: docStr,
+              doc: curDocStr,
               manager: 'Kỹ sư vận hành',
               co2e: dailyCo2e,
               biogenicCo2: dailyBioCo2,
@@ -3971,7 +4046,10 @@
               fileName: '',
               createdAt: now,
               entryRole: 'engineer',
-              entryMode: 'auto_daily',
+              entryMode: isContinuousMeter ? 'meter' : 'auto_daily',
+              meterStart: curMeterStart,
+              meterEnd: curMeterEnd,
+              meterMultiplier: isContinuousMeter ? meterMult.toString() : '1',
               isBaseline: isProc ? 'true' : 'false',
               isInvoice: 'false',
               isDowntime: 'false',
@@ -4663,86 +4741,991 @@
     };
 
     // =========================================================================
-    // PHÂN HỆ KẾ TOÁN: BẢNG KÊ HÓA ĐƠN EXCEL (FILE MẪU, BÓC TÁCH & ĐỐI SOÁT NẠP HÀNG LOẠT)
+    // PHÂN HỆ KẾ TOÁN: BẢNG KÊ HÓA ĐƠN EXCEL THEO TỪNG NGÀNH (16 NGÀNH CHUẨN KNK)
     // =========================================================================
     let _parsedInvoiceRows = [];
 
+    const INDUSTRY_INVOICE_TEMPLATES = {
+      "Thep_Luyen_Kim": [
+        {
+          "Ngày hóa đơn": "15/02/2026",
+          "Số hóa đơn": "HĐ-EVN-0012948",
+          "Nhà cung cấp": "Công ty Điện lực EVN",
+          "Hạng mục chi phí / Loại năng lượng": "Điện lưới EVN (Trạm biến áp 110kV cấp EAF & LF)",
+          "Số lượng tiêu thụ": 14500000,
+          "Đơn vị tính": "kWh",
+          "Thành tiền (VNĐ)": 29000000000,
+          "Ghi chú / Phân xưởng sử dụng": "Điện sản xuất Lò hồ quang UHP và Lò tinh luyện Tháng 02/2026"
+        },
+        {
+          "Ngày hóa đơn": "18/02/2026",
+          "Số hóa đơn": "HĐ-COAL-9921",
+          "Nhà cung cấp": "Tập đoàn Than - Khoáng sản VN (TKV)",
+          "Hạng mục chi phí / Loại năng lượng": "Than antraxit / Than cốc luyện kim",
+          "Số lượng tiêu thụ": 350000,
+          "Đơn vị tính": "kg",
+          "Thành tiền (VNĐ)": 1050000000,
+          "Ghi chú / Phân xưởng sử dụng": "Than tạo xỉ bọt & hoàn nguyên carbon cho lò EAF"
+        },
+        {
+          "Ngày hóa đơn": "20/02/2026",
+          "Số hóa đơn": "HĐ-GAS-4412",
+          "Nhà cung cấp": "Tổng công ty Khí Việt Nam (PV Gas)",
+          "Hạng mục chi phí / Loại năng lượng": "Khí tự nhiên hóa lỏng (LNG)",
+          "Số lượng tiêu thụ": 75000,
+          "Đơn vị tính": "kg",
+          "Thành tiền (VNĐ)": 1350000000,
+          "Ghi chú / Phân xưởng sử dụng": "Nhiên liệu cấp dàn lò nung phôi cán thép liên tục"
+        },
+        {
+          "Ngày hóa đơn": "22/02/2026",
+          "Số hóa đơn": "HĐ-GAS-2201",
+          "Nhà cung cấp": "Gas Petrolimex",
+          "Hạng mục chi phí / Loại năng lượng": "Khí hóa lỏng (LPG)",
+          "Số lượng tiêu thụ": 12000,
+          "Đơn vị tính": "kg",
+          "Thành tiền (VNĐ)": 360000000,
+          "Ghi chú / Phân xưởng sử dụng": "Đầu đốt sấy thùng rót Ladle và mỏ cắt phôi tự động"
+        },
+        {
+          "Ngày hóa đơn": "25/02/2026",
+          "Số hóa đơn": "HĐ-PETRO-882",
+          "Nhà cung cấp": "Petrolimex",
+          "Hạng mục chi phí / Loại năng lượng": "Dầu Diesel (DO) bồn trạm cấp nội bộ",
+          "Số lượng tiêu thụ": 18000,
+          "Đơn vị tính": "lít",
+          "Thành tiền (VNĐ)": 378000000,
+          "Ghi chú / Phân xưởng sử dụng": "Đội xe nâng phôi, xe xúc xỉ mác thép & máy phát điện"
+        },
+        {
+          "Ngày hóa đơn": "26/02/2026",
+          "Số hóa đơn": "HĐ-REF-10",
+          "Nhà cung cấp": "Daikin Vietnam",
+          "Hạng mục chi phí / Loại năng lượng": "Môi chất lạnh R-410A",
+          "Số lượng tiêu thụ": 80,
+          "Đơn vị tính": "kg",
+          "Thành tiền (VNĐ)": 28000000,
+          "Ghi chú / Phân xưởng sử dụng": "Nạp bổ sung hệ thống Chiller làm mát nước tuần hoàn EAF"
+        },
+        {
+          "Ngày hóa đơn": "28/02/2026",
+          "Số hóa đơn": "HĐ-PETRO-115",
+          "Nhà cung cấp": "Petrolimex",
+          "Hạng mục chi phí / Loại năng lượng": "Xăng RON 95 (Xe công vụ)",
+          "Số lượng tiêu thụ": 650,
+          "Đơn vị tính": "lít",
+          "Thành tiền (VNĐ)": 15600000,
+          "Ghi chú / Phân xưởng sử dụng": "Nhiên liệu đội xe đưa đón chuyên gia & kỹ sư nhà máy"
+        }
+      ],
+      "Nhom_Luyen_Kim": [
+        {
+          "Ngày hóa đơn": "15/02/2026",
+          "Số hóa đơn": "HĐ-EVN-009941",
+          "Nhà cung cấp": "Công ty Điện lực EVN",
+          "Hạng mục chi phí / Loại năng lượng": "Điện lưới EVN (Trạm nắn dòng Rectifier 300 kA)",
+          "Số lượng tiêu thụ": 28500000,
+          "Đơn vị tính": "kWh",
+          "Thành tiền (VNĐ)": 57000000000,
+          "Ghi chú / Phân xưởng sử dụng": "Điện phân nhôm công suất cao 120 bể Hall-Héroult Tháng 02/2026"
+        },
+        {
+          "Ngày hóa đơn": "18/02/2026",
+          "Số hóa đơn": "HĐ-PETRO-FO-01",
+          "Nhà cung cấp": "Petrolimex",
+          "Hạng mục chi phí / Loại năng lượng": "Dầu nặng FO (Fuel Oil 380)",
+          "Số lượng tiêu thụ": 120000,
+          "Đơn vị tính": "kg",
+          "Thành tiền (VNĐ)": 1800000000,
+          "Ghi chú / Phân xưởng sử dụng": "Dầu đốt Lò nung cực Anode Carbon buồng hở"
+        },
+        {
+          "Ngày hóa đơn": "20/02/2026",
+          "Số hóa đơn": "HĐ-GAS-LNG-02",
+          "Nhà cung cấp": "PV Gas LNG",
+          "Hạng mục chi phí / Loại năng lượng": "Khí tự nhiên hóa lỏng (LNG)",
+          "Số lượng tiêu thụ": 45000,
+          "Đơn vị tính": "kg",
+          "Thành tiền (VNĐ)": 810000000,
+          "Ghi chú / Phân xưởng sử dụng": "Cấp lò nấu chảy & giữ nhiệt nhôm tái chế buồng đôi"
+        },
+        {
+          "Ngày hóa đơn": "22/02/2026",
+          "Số hóa đơn": "HĐ-GAS-LPG-03",
+          "Nhà cung cấp": "Gas Petrolimex",
+          "Hạng mục chi phí / Loại năng lượng": "Khí hóa lỏng (LPG)",
+          "Số lượng tiêu thụ": 8000,
+          "Đơn vị tính": "kg",
+          "Thành tiền (VNĐ)": 240000000,
+          "Ghi chú / Phân xưởng sử dụng": "Lò đồng đều hóa nhiệt phôi nhôm Billet Homogenizing"
+        },
+        {
+          "Ngày hóa đơn": "25/02/2026",
+          "Số hóa đơn": "HĐ-PETRO-DO-04",
+          "Nhà cung cấp": "Petrolimex",
+          "Hạng mục chi phí / Loại năng lượng": "Dầu Diesel (DO)",
+          "Số lượng tiêu thụ": 12000,
+          "Đơn vị tính": "lít",
+          "Thành tiền (VNĐ)": 252000000,
+          "Ghi chú / Phân xưởng sử dụng": "Xe nâng bốc dỡ phôi nhôm thỏi & trạm bơm PCCC"
+        },
+        {
+          "Ngày hóa đơn": "27/02/2026",
+          "Số hóa đơn": "HĐ-REF-410-05",
+          "Nhà cung cấp": "Daikin Vietnam",
+          "Hạng mục chi phí / Loại năng lượng": "Môi chất lạnh R-410A",
+          "Số lượng tiêu thụ": 60,
+          "Đơn vị tính": "kg",
+          "Thành tiền (VNĐ)": 21000000,
+          "Ghi chú / Phân xưởng sử dụng": "Bảo trì hệ thống Chiller làm mát phòng điện phân & văn phòng"
+        }
+      ],
+      "Xi_Mang": [
+        {
+          "Ngày hóa đơn": "15/02/2026",
+          "Số hóa đơn": "HĐ-EVN-003341",
+          "Nhà cung cấp": "Công ty Điện lực EVN",
+          "Hạng mục chi phí / Loại năng lượng": "Điện lưới EVN (Trạm biến áp trung/cao thế)",
+          "Số lượng tiêu thụ": 8500000,
+          "Đơn vị tính": "kWh",
+          "Thành tiền (VNĐ)": 17000000000,
+          "Ghi chú / Phân xưởng sử dụng": "Điện vận hành trạm nghiền Clinker, máy nghiền liệu và quạt hút lò"
+        },
+        {
+          "Ngày hóa đơn": "18/02/2026",
+          "Số hóa đơn": "HĐ-TKV-COAL-01",
+          "Nhà cung cấp": "Tập đoàn Than - Khoáng sản VN",
+          "Hạng mục chi phí / Loại năng lượng": "Than cám antraxit (Cám 3a / 4a mịn)",
+          "Số lượng tiêu thụ": 1200000,
+          "Đơn vị tính": "kg",
+          "Thành tiền (VNĐ)": 3240000000,
+          "Ghi chú / Phân xưởng sử dụng": "Nhiên liệu chính đốt vòi phun Lò nung Clanhke phương pháp khô"
+        },
+        {
+          "Ngày hóa đơn": "20/02/2026",
+          "Số hóa đơn": "HĐ-PETRO-DO-02",
+          "Nhà cung cấp": "Petrolimex",
+          "Hạng mục chi phí / Loại năng lượng": "Dầu Diesel (DO) bồn tổng",
+          "Số lượng tiêu thụ": 25000,
+          "Đơn vị tính": "lít",
+          "Thành tiền (VNĐ)": 525000000,
+          "Ghi chú / Phân xưởng sử dụng": "Xe xúc lật khai thác mỏ đá vôi & dầu sấy vòi đốt phụ lò quay"
+        },
+        {
+          "Ngày hóa đơn": "23/02/2026",
+          "Số hóa đơn": "HĐ-GAS-LPG-03",
+          "Nhà cung cấp": "Gas Petrolimex",
+          "Hạng mục chi phí / Loại năng lượng": "Khí hóa lỏng (LPG)",
+          "Số lượng tiêu thụ": 1500,
+          "Đơn vị tính": "kg",
+          "Thành tiền (VNĐ)": 45000000,
+          "Ghi chú / Phân xưởng sử dụng": "Nhiệt cấp phòng thí nghiệm kiểm định mác xi măng & nhà ăn"
+        },
+        {
+          "Ngày hóa đơn": "26/02/2026",
+          "Số hóa đơn": "HĐ-REF-134-04",
+          "Nhà cung cấp": "Carrier Vietnam",
+          "Hạng mục chi phí / Loại năng lượng": "Môi chất lạnh R-134a",
+          "Số lượng tiêu thụ": 40,
+          "Đơn vị tính": "kg",
+          "Thành tiền (VNĐ)": 12000000,
+          "Ghi chú / Phân xưởng sử dụng": "Bảo dưỡng điều hòa phòng điều khiển trung tâm CCR"
+        }
+      ],
+      "Nhua_Hoa_Chat": [
+        {
+          "Ngày hóa đơn": "15/02/2026",
+          "Số hóa đơn": "HĐ-EVN-005521",
+          "Nhà cung cấp": "Công ty Điện lực EVN",
+          "Hạng mục chi phí / Loại năng lượng": "Điện lưới EVN (Tổng công tơ nhà máy)",
+          "Số lượng tiêu thụ": 3200000,
+          "Đơn vị tính": "kWh",
+          "Thành tiền (VNĐ)": 6400000000,
+          "Ghi chú / Phân xưởng sử dụng": "Dây chuyền ép đùn màng nhựa, máy ép phun polymer và tháp làm mát"
+        },
+        {
+          "Ngày hóa đơn": "18/02/2026",
+          "Số hóa đơn": "HĐ-GAS-LNG-01",
+          "Nhà cung cấp": "PV Gas",
+          "Hạng mục chi phí / Loại năng lượng": "Khí tự nhiên hóa lỏng (LNG)",
+          "Số lượng tiêu thụ": 35000,
+          "Đơn vị tính": "kg",
+          "Thành tiền (VNĐ)": 630000000,
+          "Ghi chú / Phân xưởng sử dụng": "Nhiên liệu đốt lò gia nhiệt dầu tải nhiệt xưởng hóa chất"
+        },
+        {
+          "Ngày hóa đơn": "21/02/2026",
+          "Số hóa đơn": "HĐ-GAS-LPG-02",
+          "Nhà cung cấp": "Petrolimex Gas",
+          "Hạng mục chi phí / Loại năng lượng": "Khí hóa lỏng (LPG)",
+          "Số lượng tiêu thụ": 6000,
+          "Đơn vị tính": "kg",
+          "Thành tiền (VNĐ)": 180000000,
+          "Ghi chú / Phân xưởng sử dụng": "Dàn sấy hạt nhựa compound và lò ủ màng PE"
+        },
+        {
+          "Ngày hóa đơn": "24/02/2026",
+          "Số hóa đơn": "HĐ-PETRO-DO-03",
+          "Nhà cung cấp": "Petrolimex",
+          "Hạng mục chi phí / Loại năng lượng": "Dầu Diesel (DO)",
+          "Số lượng tiêu thụ": 8500,
+          "Đơn vị tính": "lít",
+          "Thành tiền (VNĐ)": 178500000,
+          "Ghi chú / Phân xưởng sử dụng": "Đội xe nâng bốc xếp pallet hạt nhựa nguyên sinh và máy phát điện"
+        },
+        {
+          "Ngày hóa đơn": "26/02/2026",
+          "Số hóa đơn": "HĐ-REF-410-04",
+          "Nhà cung cấp": "Trane Vietnam",
+          "Hạng mục chi phí / Loại năng lượng": "Môi chất lạnh R-410A",
+          "Số lượng tiêu thụ": 50,
+          "Đơn vị tính": "kg",
+          "Thành tiền (VNĐ)": 17500000,
+          "Ghi chú / Phân xưởng sử dụng": "Bảo trì nạp Chiller giải nhiệt khuôn định hình đúc nhựa"
+        }
+      ],
+      "Phan_Bon": [
+        {
+          "Ngày hóa đơn": "15/02/2026",
+          "Số hóa đơn": "HĐ-GAS-PVN-01",
+          "Nhà cung cấp": "Tổng công ty Khí Việt Nam (PV Gas)",
+          "Hạng mục chi phí / Loại năng lượng": "Khí tự nhiên thương phẩm (Gas thiên nhiên)",
+          "Số lượng tiêu thụ": 650000,
+          "Đơn vị tính": "kg",
+          "Thành tiền (VNĐ)": 7800000000,
+          "Ghi chú / Phân xưởng sử dụng": "Khí nguyên liệu tổng hợp Amoniac (NH3) & nhiên liệu đốt lò tạo hơi"
+        },
+        {
+          "Ngày hóa đơn": "18/02/2026",
+          "Số hóa đơn": "HĐ-EVN-007781",
+          "Nhà cung cấp": "Công ty Điện lực EVN",
+          "Hạng mục chi phí / Loại năng lượng": "Điện lưới EVN (Trạm biến áp trung thế)",
+          "Số lượng tiêu thụ": 4800000,
+          "Đơn vị tính": "kWh",
+          "Thành tiền (VNĐ)": 9600000000,
+          "Ghi chú / Phân xưởng sử dụng": "Điện phân xưởng tạo hạt Urea/NPK, máy nén khí áp cao & tháp sấy"
+        },
+        {
+          "Ngày hóa đơn": "21/02/2026",
+          "Số hóa đơn": "HĐ-PETRO-DO-02",
+          "Nhà cung cấp": "Petrolimex",
+          "Hạng mục chi phí / Loại năng lượng": "Dầu Diesel (DO)",
+          "Số lượng tiêu thụ": 16000,
+          "Đơn vị tính": "lít",
+          "Thành tiền (VNĐ)": 336000000,
+          "Ghi chú / Phân xưởng sử dụng": "Xe cơ giới bốc dỡ kho xá phân bón thành phẩm & trạm bơm"
+        },
+        {
+          "Ngày hóa đơn": "24/02/2026",
+          "Số hóa đơn": "HĐ-GAS-LPG-03",
+          "Nhà cung cấp": "Gas Petrolimex",
+          "Hạng mục chi phí / Loại năng lượng": "Khí hóa lỏng (LPG)",
+          "Số lượng tiêu thụ": 4500,
+          "Đơn vị tính": "kg",
+          "Thành tiền (VNĐ)": 135000000,
+          "Ghi chú / Phân xưởng sử dụng": "Cấp nhiệt đầu sấy bao bì đóng gói chống ẩm Ure"
+        },
+        {
+          "Ngày hóa đơn": "26/02/2026",
+          "Số hóa đơn": "HĐ-REF-134-04",
+          "Nhà cung cấp": "Daikin Vietnam",
+          "Hạng mục chi phí / Loại năng lượng": "Môi chất lạnh R-134a",
+          "Số lượng tiêu thụ": 45,
+          "Đơn vị tính": "kg",
+          "Thành tiền (VNĐ)": 13500000,
+          "Ghi chú / Phân xưởng sử dụng": "Bảo dưỡng hệ thống làm lạnh sâu phòng điều khiển hóa nghiệm"
+        }
+      ],
+      "Nhiet_Dien_Dien_Luc": [
+        {
+          "Ngày hóa đơn": "15/02/2026",
+          "Số hóa đơn": "HĐ-TKV-COAL-01",
+          "Nhà cung cấp": "TKV - Công ty Than Cẩm Phả",
+          "Hạng mục chi phí / Loại năng lượng": "Than antraxit / Than bitum nghiền bột",
+          "Số lượng tiêu thụ": 4500000,
+          "Đơn vị tính": "kg",
+          "Thành tiền (VNĐ)": 9900000000,
+          "Ghi chú / Phân xưởng sử dụng": "Nhiên liệu đốt lò hơi tầng sôi tuần hoàn CFB Tháng 02/2026"
+        },
+        {
+          "Ngày hóa đơn": "18/02/2026",
+          "Số hóa đơn": "HĐ-PETRO-DO-02",
+          "Nhà cung cấp": "Petrolimex",
+          "Hạng mục chi phí / Loại năng lượng": "Dầu Diesel (DO)",
+          "Số lượng tiêu thụ": 45000,
+          "Đơn vị tính": "lít",
+          "Thành tiền (VNĐ)": 945000000,
+          "Ghi chú / Phân xưởng sử dụng": "Nhiên liệu mồi đốt khởi động lò hơi và tổ máy phát khẩn cấp"
+        },
+        {
+          "Ngày hóa đơn": "20/02/2026",
+          "Số hóa đơn": "HĐ-EVN-TD-03",
+          "Nhà cung cấp": "Tổng công ty Truyền tải điện EVN",
+          "Hạng mục chi phí / Loại năng lượng": "Điện tự dùng nhà máy (Nhận từ lưới)",
+          "Số lượng tiêu thụ": 850000,
+          "Đơn vị tính": "kWh",
+          "Thành tiền (VNĐ)": 1700000000,
+          "Ghi chú / Phân xưởng sử dụng": "Điện phụ trợ chạy hệ thống bơm nước cấp, quạt khói và máy nghiền"
+        },
+        {
+          "Ngày hóa đơn": "23/02/2026",
+          "Số hóa đơn": "HĐ-GAS-SF6-04",
+          "Nhà cung cấp": "ABB Power Grids",
+          "Hạng mục chi phí / Loại năng lượng": "Khí cách điện Sulfur Hexafluoride (SF6)",
+          "Số lượng tiêu thụ": 25,
+          "Đơn vị tính": "kg",
+          "Thành tiền (VNĐ)": 37500000,
+          "Ghi chú / Phân xưởng sử dụng": "Nạp bù cách điện máy cắt trạm phân phối GIS 220kV"
+        },
+        {
+          "Ngày hóa đơn": "26/02/2026",
+          "Số hóa đơn": "HĐ-REF-410-05",
+          "Nhà cung cấp": "Panasonic Vietnam",
+          "Hạng mục chi phí / Loại năng lượng": "Môi chất lạnh R-410A",
+          "Số lượng tiêu thụ": 35,
+          "Đơn vị tính": "kg",
+          "Thành tiền (VNĐ)": 12250000,
+          "Ghi chú / Phân xưởng sử dụng": "Bảo trì Chiller giải nhiệt phòng điều khiển trung tâm DCS"
+        }
+      ],
+      "Hydrogen": [
+        {
+          "Ngày hóa đơn": "15/02/2026",
+          "Số hóa đơn": "HĐ-EVN-008819",
+          "Nhà cung cấp": "Công ty Điện lực EVN",
+          "Hạng mục chi phí / Loại năng lượng": "Điện lưới EVN (Trạm điện phân siêu cao thế)",
+          "Số lượng tiêu thụ": 9500000,
+          "Đơn vị tính": "kWh",
+          "Thành tiền (VNĐ)": 19000000000,
+          "Ghi chú / Phân xưởng sử dụng": "Điện phân nước kiềm PEM/AEL công suất 20MW Tháng 02/2026"
+        },
+        {
+          "Ngày hóa đơn": "18/02/2026",
+          "Số hóa đơn": "HĐ-GAS-SMR-01",
+          "Nhà cung cấp": "PV Gas",
+          "Hạng mục chi phí / Loại năng lượng": "Khí tự nhiên thương phẩm (Gas/CNG)",
+          "Số lượng tiêu thụ": 120000,
+          "Đơn vị tính": "kg",
+          "Thành tiền (VNĐ)": 1800000000,
+          "Ghi chú / Phân xưởng sử dụng": "Cấp nguyên liệu cho phân xưởng biến tính hơi nước SMR Hydro xám"
+        },
+        {
+          "Ngày hóa đơn": "22/02/2026",
+          "Số hóa đơn": "HĐ-PETRO-DO-02",
+          "Nhà cung cấp": "Petrolimex",
+          "Hạng mục chi phí / Loại năng lượng": "Dầu Diesel (DO)",
+          "Số lượng tiêu thụ": 7000,
+          "Đơn vị tính": "lít",
+          "Thành tiền (VNĐ)": 147000000,
+          "Ghi chú / Phân xưởng sử dụng": "Đội xe đầu kéo bồn chuyên dụng vận chuyển khí hydro nén tube trailer"
+        },
+        {
+          "Ngày hóa đơn": "26/02/2026",
+          "Số hóa đơn": "HĐ-REF-507-03",
+          "Nhà cung cấp": "Bitzer Vietnam",
+          "Hạng mục chi phí / Loại năng lượng": "Môi chất lạnh R-507A",
+          "Số lượng tiêu thụ": 30,
+          "Đơn vị tính": "kg",
+          "Thành tiền (VNĐ)": 15000000,
+          "Ghi chú / Phân xưởng sử dụng": "Bảo dưỡng trạm nén lạnh hóa lỏng và bảo quản hydro nhiệt độ thấp"
+        }
+      ],
+      "Bao_Bi_Giay": [
+        {
+          "Ngày hóa đơn": "15/02/2026",
+          "Số hóa đơn": "HĐ-BIO-WOOD-01",
+          "Nhà cung cấp": "Công ty Năng lượng Xanh",
+          "Hạng mục chi phí / Loại năng lượng": "Nhiên liệu sinh khối (Mùn cưa ép viên, dăm băm)",
+          "Số lượng tiêu thụ": 650000,
+          "Đơn vị tính": "kg",
+          "Thành tiền (VNĐ)": 1170000000,
+          "Ghi chú / Phân xưởng sử dụng": "Nhiên liệu đốt lò hơi tầng sôi cấp hơi bão hòa sấy bột giấy"
+        },
+        {
+          "Ngày hóa đơn": "18/02/2026",
+          "Số hóa đơn": "HĐ-EVN-004412",
+          "Nhà cung cấp": "Công ty Điện lực EVN",
+          "Hạng mục chi phí / Loại năng lượng": "Điện lưới EVN (Tổng trạm xeo giấy)",
+          "Số lượng tiêu thụ": 2800000,
+          "Đơn vị tính": "kWh",
+          "Thành tiền (VNĐ)": 5600000000,
+          "Ghi chú / Phân xưởng sử dụng": "Dàn máy xeo giấy tự động, máy nghiền bột thủy lực và ép cán cuộn"
+        },
+        {
+          "Ngày hóa đơn": "21/02/2026",
+          "Số hóa đơn": "HĐ-GAS-LNG-02",
+          "Nhà cung cấp": "PV Gas",
+          "Hạng mục chi phí / Loại năng lượng": "Khí tự nhiên hóa lỏng (LNG)",
+          "Số lượng tiêu thụ": 25000,
+          "Đơn vị tính": "kg",
+          "Thành tiền (VNĐ)": 450000000,
+          "Ghi chú / Phân xưởng sử dụng": "Đầu đốt sấy tráng phủ bề mặt giấy carton cao cấp"
+        },
+        {
+          "Ngày hóa đơn": "24/02/2026",
+          "Số hóa đơn": "HĐ-PETRO-DO-03",
+          "Nhà cung cấp": "Petrolimex",
+          "Hạng mục chi phí / Loại năng lượng": "Dầu Diesel (DO)",
+          "Số lượng tiêu thụ": 9500,
+          "Đơn vị tính": "lít",
+          "Thành tiền (VNĐ)": 199500000,
+          "Ghi chú / Phân xưởng sử dụng": "Đội xe nâng kẹp cuộn tròn, xe gắp giấy phế liệu và máy phát"
+        },
+        {
+          "Ngày hóa đơn": "26/02/2026",
+          "Số hóa đơn": "HĐ-REF-410-04",
+          "Nhà cung cấp": "Daikin Vietnam",
+          "Hạng mục chi phí / Loại năng lượng": "Môi chất lạnh R-410A",
+          "Số lượng tiêu thụ": 25,
+          "Đơn vị tính": "kg",
+          "Thành tiền (VNĐ)": 8750000,
+          "Ghi chú / Phân xưởng sử dụng": "Bảo trì điều hòa phòng thí nghiệm cơ lý giấy"
+        }
+      ],
+      "Det_May": [
+        {
+          "Ngày hóa đơn": "15/02/2026",
+          "Số hóa đơn": "HĐ-BIO-PELLETS-01",
+          "Nhà cung cấp": "Công ty Cổ phần Năng lượng Biomass",
+          "Hạng mục chi phí / Loại năng lượng": "Nhiên liệu sinh khối (Củi trấu ép, viên nén gỗ)",
+          "Số lượng tiêu thụ": 480000,
+          "Đơn vị tính": "kg",
+          "Thành tiền (VNĐ)": 864000000,
+          "Ghi chú / Phân xưởng sử dụng": "Nhiên liệu đốt lò hơi cấp hơi sấy nhiệt xưởng dệt nhuộm"
+        },
+        {
+          "Ngày hóa đơn": "18/02/2026",
+          "Số hóa đơn": "HĐ-EVN-006611",
+          "Nhà cung cấp": "Công ty Điện lực EVN",
+          "Hạng mục chi phí / Loại năng lượng": "Điện lưới EVN (Tổng xưởng may dệt)",
+          "Số lượng tiêu thụ": 2100000,
+          "Đơn vị tính": "kWh",
+          "Thành tiền (VNĐ)": 4200000000,
+          "Ghi chú / Phân xưởng sử dụng": "Dàn máy dệt thoi, máy may công nghiệp và hệ thống chiếu sáng"
+        },
+        {
+          "Ngày hóa đơn": "21/02/2026",
+          "Số hóa đơn": "HĐ-GAS-LPG-02",
+          "Nhà cung cấp": "Gas Petrolimex",
+          "Hạng mục chi phí / Loại năng lượng": "Khí hóa lỏng (LPG)",
+          "Số lượng tiêu thụ": 12000,
+          "Đơn vị tính": "kg",
+          "Thành tiền (VNĐ)": 360000000,
+          "Ghi chú / Phân xưởng sử dụng": "Cấp nhiệt buồng căng kim định hình nhiệt vải stenter"
+        },
+        {
+          "Ngày hóa đơn": "24/02/2026",
+          "Số hóa đơn": "HĐ-PETRO-DO-03",
+          "Nhà cung cấp": "Petrolimex",
+          "Hạng mục chi phí / Loại năng lượng": "Dầu Diesel (DO)",
+          "Số lượng tiêu thụ": 6500,
+          "Đơn vị tính": "lít",
+          "Thành tiền (VNĐ)": 136500000,
+          "Ghi chú / Phân xưởng sử dụng": "Đội xe tải chuyên chở vải cuộn thành phẩm & máy phát điện"
+        },
+        {
+          "Ngày hóa đơn": "26/02/2026",
+          "Số hóa đơn": "HĐ-REF-410-04",
+          "Nhà cung cấp": "Panasonic Vietnam",
+          "Hạng mục chi phí / Loại năng lượng": "Môi chất lạnh R-410A",
+          "Số lượng tiêu thụ": 45,
+          "Đơn vị tính": "kg",
+          "Thành tiền (VNĐ)": 15750000,
+          "Ghi chú / Phân xưởng sử dụng": "Nạp bổ sung hệ thống điều hòa không khí nhà xưởng may"
+        }
+      ],
+      "Da_Giay": [
+        {
+          "Ngày hóa đơn": "15/02/2026",
+          "Số hóa đơn": "HĐ-EVN-007712",
+          "Nhà cung cấp": "Công ty Điện lực EVN",
+          "Hạng mục chi phí / Loại năng lượng": "Điện lưới EVN (Tổng nhà máy da giày)",
+          "Số lượng tiêu thụ": 1850000,
+          "Đơn vị tính": "kWh",
+          "Thành tiền (VNĐ)": 3700000000,
+          "Ghi chú / Phân xưởng sử dụng": "Dây chuyền gò ép đế giày, máy may kim điện tử và băng tải lắp ráp"
+        },
+        {
+          "Ngày hóa đơn": "18/02/2026",
+          "Số hóa đơn": "HĐ-PETRO-DO-01",
+          "Nhà cung cấp": "Petrolimex",
+          "Hạng mục chi phí / Loại năng lượng": "Dầu Diesel (DO)",
+          "Số lượng tiêu thụ": 9000,
+          "Đơn vị tính": "lít",
+          "Thành tiền (VNĐ)": 189000000,
+          "Ghi chú / Phân xưởng sử dụng": "Xe tải giao nhận đế/mũ giày và máy phát điện dự phòng cúp điện"
+        },
+        {
+          "Ngày hóa đơn": "20/02/2026",
+          "Số hóa đơn": "HĐ-PETRO-95-02",
+          "Nhà cung cấp": "Petrolimex",
+          "Hạng mục chi phí / Loại năng lượng": "Xăng RON 95 (Xe công vụ & đưa đón)",
+          "Số lượng tiêu thụ": 850,
+          "Đơn vị tính": "lít",
+          "Thành tiền (VNĐ)": 20400000,
+          "Ghi chú / Phân xưởng sử dụng": "Đội xe đưa đón công nhân viên và vận chuyển mẫu hàng"
+        },
+        {
+          "Ngày hóa đơn": "23/02/2026",
+          "Số hóa đơn": "HĐ-GAS-LPG-03",
+          "Nhà cung cấp": "Gas Petrolimex",
+          "Hạng mục chi phí / Loại năng lượng": "Khí hóa lỏng (LPG)",
+          "Số lượng tiêu thụ": 5500,
+          "Đơn vị tính": "kg",
+          "Thành tiền (VNĐ)": 165000000,
+          "Ghi chú / Phân xưởng sử dụng": "Cấp nhiệt lò sấy keo dán đế giày và nhà ăn tập thể công nhân"
+        },
+        {
+          "Ngày hóa đơn": "26/02/2026",
+          "Số hóa đơn": "HĐ-REF-404-04",
+          "Nhà cung cấp": "Copeland Vietnam",
+          "Hạng mục chi phí / Loại năng lượng": "Môi chất lạnh R-404A",
+          "Số lượng tiêu thụ": 30,
+          "Đơn vị tính": "kg",
+          "Thành tiền (VNĐ)": 10500000,
+          "Ghi chú / Phân xưởng sử dụng": "Bảo trì kho lạnh giữ form mẫu giày xuất khẩu"
+        }
+      ],
+      "Go_Noi_That": [
+        {
+          "Ngày hóa đơn": "15/02/2026",
+          "Số hóa đơn": "HĐ-BIO-SAWDUST-01",
+          "Nhà cung cấp": "Nhà cung cấp Dăm Bào Vina",
+          "Hạng mục chi phí / Loại năng lượng": "Nhiên liệu sinh khối (Mùn cưa, dăm bào gỗ keo)",
+          "Số lượng tiêu thụ": 380000,
+          "Đơn vị tính": "kg",
+          "Thành tiền (VNĐ)": 456000000,
+          "Ghi chú / Phân xưởng sử dụng": "Đốt lò hơi sấy gỗ chân không chống mối mọt"
+        },
+        {
+          "Ngày hóa đơn": "18/02/2026",
+          "Số hóa đơn": "HĐ-EVN-008123",
+          "Nhà cung cấp": "Công ty Điện lực EVN",
+          "Hạng mục chi phí / Loại năng lượng": "Điện lưới EVN (Xưởng máy CNC & cưa xẻ)",
+          "Số lượng tiêu thụ": 1650000,
+          "Đơn vị tính": "kWh",
+          "Thành tiền (VNĐ)": 3300000000,
+          "Ghi chú / Phân xưởng sử dụng": "Dàn máy cắt CNC, máy chà nhám thùng, máy bào 4 mặt và hút bụi gỗ"
+        },
+        {
+          "Ngày hóa đơn": "21/02/2026",
+          "Số hóa đơn": "HĐ-GAS-LPG-02",
+          "Nhà cung cấp": "Gas Petrolimex",
+          "Hạng mục chi phí / Loại năng lượng": "Khí hóa lỏng (LPG)",
+          "Số lượng tiêu thụ": 4800,
+          "Đơn vị tính": "kg",
+          "Thành tiền (VNĐ)": 144000000,
+          "Ghi chú / Phân xưởng sử dụng": "Cấp nhiệt buồng sấy sơn UV bóng bề mặt nội thất gỗ"
+        },
+        {
+          "Ngày hóa đơn": "24/02/2026",
+          "Số hóa đơn": "HĐ-PETRO-DO-03",
+          "Nhà cung cấp": "Petrolimex",
+          "Hạng mục chi phí / Loại năng lượng": "Dầu Diesel (DO)",
+          "Số lượng tiêu thụ": 11000,
+          "Đơn vị tính": "lít",
+          "Thành tiền (VNĐ)": 231000000,
+          "Ghi chú / Phân xưởng sử dụng": "Xe cẩu bốc dỡ gỗ khúc, xe nâng pallet gỗ thành phẩm & máy phát"
+        },
+        {
+          "Ngày hóa đơn": "26/02/2026",
+          "Số hóa đơn": "HĐ-REF-410-04",
+          "Nhà cung cấp": "Daikin Vietnam",
+          "Hạng mục chi phí / Loại năng lượng": "Môi chất lạnh R-410A",
+          "Số lượng tiêu thụ": 25,
+          "Đơn vị tính": "kg",
+          "Thành tiền (VNĐ)": 8750000,
+          "Ghi chú / Phân xưởng sử dụng": "Bảo trì điều hòa showroom trưng bày nội thất gỗ"
+        }
+      ],
+      "Dien_Tu": [
+        {
+          "Ngày hóa đơn": "15/02/2026",
+          "Số hóa đơn": "HĐ-EVN-009112",
+          "Nhà cung cấp": "Công ty Điện lực EVN",
+          "Hạng mục chi phí / Loại năng lượng": "Điện lưới EVN (Cấp phòng sạch Cleanroom & SMT)",
+          "Số lượng tiêu thụ": 5200000,
+          "Đơn vị tính": "kWh",
+          "Thành tiền (VNĐ)": 10400000000,
+          "Ghi chú / Phân xưởng sử dụng": "Cấp điện phân xưởng SMT gắn linh kiện, phòng sạch Class 1000 và chiller"
+        },
+        {
+          "Ngày hóa đơn": "18/02/2026",
+          "Số hóa đơn": "HĐ-AIR-N2-01",
+          "Nhà cung cấp": "Messer Vietnam",
+          "Hạng mục chi phí / Loại năng lượng": "Khí Nitơ lỏng tinh khiết (N2)",
+          "Số lượng tiêu thụ": 35000,
+          "Đơn vị tính": "kg",
+          "Thành tiền (VNĐ)": 420000000,
+          "Ghi chú / Phân xưởng sử dụng": "Cấp khí trơ bảo vệ lò hàn reflow bo mạch điện tử"
+        },
+        {
+          "Ngày hóa đơn": "20/02/2026",
+          "Số hóa đơn": "HĐ-GAS-CO2-02",
+          "Nhà cung cấp": "Air Liquide Vietnam",
+          "Hạng mục chi phí / Loại năng lượng": "Khí CO2 tinh khiết",
+          "Số lượng tiêu thụ": 1800,
+          "Đơn vị tính": "kg",
+          "Thành tiền (VNĐ)": 36000000,
+          "Ghi chú / Phân xưởng sử dụng": "Rửa siêu âm làm sạch bề mặt chi tiết quang học điện tử"
+        },
+        {
+          "Ngày hóa đơn": "23/02/2026",
+          "Số hóa đơn": "HĐ-PETRO-DO-03",
+          "Nhà cung cấp": "Petrolimex",
+          "Hạng mục chi phí / Loại năng lượng": "Dầu Diesel (DO)",
+          "Số lượng tiêu thụ": 15000,
+          "Đơn vị tính": "lít",
+          "Thành tiền (VNĐ)": 315000000,
+          "Ghi chú / Phân xưởng sử dụng": "Tổ hợp máy phát điện dự phòng cấp nguồn liên tục UPS phòng sạch"
+        },
+        {
+          "Ngày hóa đơn": "26/02/2026",
+          "Số hóa đơn": "HĐ-REF-410-04",
+          "Nhà cung cấp": "Trane Vietnam",
+          "Hạng mục chi phí / Loại năng lượng": "Môi chất lạnh R-410A",
+          "Số lượng tiêu thụ": 80,
+          "Đơn vị tính": "kg",
+          "Thành tiền (VNĐ)": 28000000,
+          "Ghi chú / Phân xưởng sử dụng": "Nạp bảo dưỡng hệ thống Chiller giải nhiệt phòng sạch trung tâm"
+        }
+      ],
+      "Thuc_Pham_Do_Uong": [
+        {
+          "Ngày hóa đơn": "15/02/2026",
+          "Số hóa đơn": "HĐ-EVN-006677",
+          "Nhà cung cấp": "Công ty Điện lực EVN",
+          "Hạng mục chi phí / Loại năng lượng": "Điện lưới EVN (Tổng nhà máy chế biến)",
+          "Số lượng tiêu thụ": 2600000,
+          "Đơn vị tính": "kWh",
+          "Thành tiền (VNĐ)": 5200000000,
+          "Ghi chú / Phân xưởng sử dụng": "Dây chuyền chiết rót lon, máy đồng hóa, đóng gói vô trùng và kho lạnh"
+        },
+        {
+          "Ngày hóa đơn": "18/02/2026",
+          "Số hóa đơn": "HĐ-BIO-HUSK-01",
+          "Nhà cung cấp": "Công ty Trấu ép Đồng Tháp",
+          "Hạng mục chi phí / Loại năng lượng": "Sinh khối (Trấu ép viên, mùn cưa hữu cơ)",
+          "Số lượng tiêu thụ": 420000,
+          "Đơn vị tính": "kg",
+          "Thành tiền (VNĐ)": 672000000,
+          "Ghi chú / Phân xưởng sử dụng": "Nhiên liệu đốt lò hơi tiệt trùng UHT và nấu men bia"
+        },
+        {
+          "Ngày hóa đơn": "20/02/2026",
+          "Số hóa đơn": "HĐ-GAS-CO2-02",
+          "Nhà cung cấp": "Công ty Khí Công nghiệp",
+          "Hạng mục chi phí / Loại năng lượng": "Khí CO2 thực phẩm",
+          "Số lượng tiêu thụ": 25000,
+          "Đơn vị tính": "kg",
+          "Thành tiền (VNĐ)": 300000000,
+          "Ghi chú / Phân xưởng sử dụng": "Sục khí ga tạo sủi chiết rót nước giải khát có ga"
+        },
+        {
+          "Ngày hóa đơn": "23/02/2026",
+          "Số hóa đơn": "HĐ-GAS-LPG-03",
+          "Nhà cung cấp": "Gas Petrolimex",
+          "Hạng mục chi phí / Loại năng lượng": "Khí hóa lỏng (LPG)",
+          "Số lượng tiêu thụ": 8500,
+          "Đơn vị tính": "kg",
+          "Thành tiền (VNĐ)": 255000000,
+          "Ghi chú / Phân xưởng sử dụng": "Cấp nhiệt lò nướng bánh kẹo và gia nhiệt thanh trùng"
+        },
+        {
+          "Ngày hóa đơn": "25/02/2026",
+          "Số hóa đơn": "HĐ-PETRO-DO-04",
+          "Nhà cung cấp": "Petrolimex",
+          "Hạng mục chi phí / Loại năng lượng": "Dầu Diesel (DO)",
+          "Số lượng tiêu thụ": 14000,
+          "Đơn vị tính": "lít",
+          "Thành tiền (VNĐ)": 294000000,
+          "Ghi chú / Phân xưởng sử dụng": "Đội xe tải thùng lạnh giao hàng nhanh và máy phát điện"
+        },
+        {
+          "Ngày hóa đơn": "27/02/2026",
+          "Số hóa đơn": "HĐ-REF-NH3-05",
+          "Nhà cung cấp": "Danfoss Vietnam",
+          "Hạng mục chi phí / Loại năng lượng": "Môi chất lạnh NH3 (Amoniac R-717)",
+          "Số lượng tiêu thụ": 120,
+          "Đơn vị tính": "kg",
+          "Thành tiền (VNĐ)": 18000000,
+          "Ghi chú / Phân xưởng sử dụng": "Nạp bù hệ thống cấp đông băng chuyền IQF"
+        }
+      ],
+      "Co_Khi_Che_Tao": [
+        {
+          "Ngày hóa đơn": "15/02/2026",
+          "Số hóa đơn": "HĐ-EVN-005118",
+          "Nhà cung cấp": "Công ty Điện lực EVN",
+          "Hạng mục chi phí / Loại năng lượng": "Điện lưới EVN (Tổng trạm cơ khí chế tạo)",
+          "Số lượng tiêu thụ": 1950000,
+          "Đơn vị tính": "kWh",
+          "Thành tiền (VNĐ)": 3900000000,
+          "Ghi chú / Phân xưởng sử dụng": "Máy cắt laser fiber công suất lớn, máy dập thủy lực và robot hàn"
+        },
+        {
+          "Ngày hóa đơn": "18/02/2026",
+          "Số hóa đơn": "HĐ-GAS-LPG-01",
+          "Nhà cung cấp": "Gas Petrolimex",
+          "Hạng mục chi phí / Loại năng lượng": "Khí hóa lỏng (LPG)",
+          "Số lượng tiêu thụ": 7500,
+          "Đơn vị tính": "kg",
+          "Thành tiền (VNĐ)": 225000000,
+          "Ghi chú / Phân xưởng sử dụng": "Khí cắt oxy-gas tôn tấm dày và nhiệt luyện khử ứng suất kim loại"
+        },
+        {
+          "Ngày hóa đơn": "21/02/2026",
+          "Số hóa đơn": "HĐ-GAS-CO2-02",
+          "Nhà cung cấp": "Air Water Vietnam",
+          "Hạng mục chi phí / Loại năng lượng": "Khí CO2 / Argon hàn kim loại MIG/MAG",
+          "Số lượng tiêu thụ": 6500,
+          "Đơn vị tính": "kg",
+          "Thành tiền (VNĐ)": 97500000,
+          "Ghi chú / Phân xưởng sử dụng": "Cấp bình khí bảo vệ mối hàn kết cấu thép"
+        },
+        {
+          "Ngày hóa đơn": "24/02/2026",
+          "Số hóa đơn": "HĐ-PETRO-DO-03",
+          "Nhà cung cấp": "Petrolimex",
+          "Hạng mục chi phí / Loại năng lượng": "Dầu Diesel (DO)",
+          "Số lượng tiêu thụ": 13500,
+          "Đơn vị tính": "lít",
+          "Thành tiền (VNĐ)": 283500000,
+          "Ghi chú / Phân xưởng sử dụng": "Đội xe cẩu tải hạng nặng, xe nâng cơ khí và máy phát"
+        },
+        {
+          "Ngày hóa đơn": "26/02/2026",
+          "Số hóa đơn": "HĐ-PETRO-95-04",
+          "Nhà cung cấp": "Petrolimex",
+          "Hạng mục chi phí / Loại năng lượng": "Xăng RON 95 (Xe kỹ sư công trình)",
+          "Số lượng tiêu thụ": 700,
+          "Đơn vị tính": "lít",
+          "Thành tiền (VNĐ)": 16800000,
+          "Ghi chú / Phân xưởng sử dụng": "Xe giám sát nghiệm thu lắp đặt kết cấu ngoài hiện trường"
+        },
+        {
+          "Ngày hóa đơn": "28/02/2026",
+          "Số hóa đơn": "HĐ-REF-410-05",
+          "Nhà cung cấp": "Panasonic Vietnam",
+          "Hạng mục chi phí / Loại năng lượng": "Môi chất lạnh R-410A",
+          "Số lượng tiêu thụ": 20,
+          "Đơn vị tính": "kg",
+          "Thành tiền (VNĐ)": 7000000,
+          "Ghi chú / Phân xưởng sử dụng": "Bảo dưỡng điều hòa phòng đo lường CMM chính xác 3D"
+        }
+      ],
+      "Nong_Nghiep": [
+        {
+          "Ngày hóa đơn": "15/02/2026",
+          "Số hóa đơn": "HĐ-BIO-STRAW-01",
+          "Nhà cung cấp": "HTX Nông nghiệp Vàng",
+          "Hạng mục chi phí / Loại năng lượng": "Phụ phẩm sinh khối (Vỏ trấu, bã rơm rạ)",
+          "Số lượng tiêu thụ": 290000,
+          "Đơn vị tính": "kg",
+          "Thành tiền (VNĐ)": 290000000,
+          "Ghi chú / Phân xưởng sử dụng": "Nhiên liệu đốt lò sấy hạt ngũ cốc, lúa gạo sau thu hoạch"
+        },
+        {
+          "Ngày hóa đơn": "18/02/2026",
+          "Số hóa đơn": "HĐ-EVN-003399",
+          "Nhà cung cấp": "Công ty Điện lực EVN",
+          "Hạng mục chi phí / Loại năng lượng": "Điện lưới EVN (Trạm bơm & xưởng sơ chế)",
+          "Số lượng tiêu thụ": 1450000,
+          "Đơn vị tính": "kWh",
+          "Thành tiền (VNĐ)": 2900000000,
+          "Ghi chú / Phân xưởng sử dụng": "Trạm bơm tưới tiêu trang trại, quạt làm mát chuồng trại và dây chuyền phân loại"
+        },
+        {
+          "Ngày hóa đơn": "21/02/2026",
+          "Số hóa đơn": "HĐ-PETRO-DO-02",
+          "Nhà cung cấp": "Petrolimex",
+          "Hạng mục chi phí / Loại năng lượng": "Dầu Diesel (DO)",
+          "Số lượng tiêu thụ": 18500,
+          "Đơn vị tính": "lít",
+          "Thành tiền (VNĐ)": 388500000,
+          "Ghi chú / Phân xưởng sử dụng": "Nhiên liệu máy cày bừa, máy gặt đập liên hợp và xe tải chở nông sản"
+        },
+        {
+          "Ngày hóa đơn": "24/02/2026",
+          "Số hóa đơn": "HĐ-GAS-LPG-03",
+          "Nhà cung cấp": "Gas Petrolimex",
+          "Hạng mục chi phí / Loại năng lượng": "Khí hóa lỏng (LPG)",
+          "Số lượng tiêu thụ": 3500,
+          "Đơn vị tính": "kg",
+          "Thành tiền (VNĐ)": 105000000,
+          "Ghi chú / Phân xưởng sử dụng": "Lò sấy hạt giống bảo quản và bếp ăn nhà tập thể trang trại"
+        },
+        {
+          "Ngày hóa đơn": "27/02/2026",
+          "Số hóa đơn": "HĐ-REF-404-04",
+          "Nhà cung cấp": "Copeland Refrigeration",
+          "Hạng mục chi phí / Loại năng lượng": "Môi chất lạnh R-404A",
+          "Số lượng tiêu thụ": 35,
+          "Đơn vị tính": "kg",
+          "Thành tiền (VNĐ)": 12250000,
+          "Ghi chú / Phân xưởng sử dụng": "Nạp bổ sung kho lạnh bảo quản rau củ quả xuất khẩu"
+        }
+      ],
+      "Van_Tai_Logistics": [
+        {
+          "Ngày hóa đơn": "15/02/2026",
+          "Số hóa đơn": "HĐ-PETRO-DO-01",
+          "Nhà cung cấp": "Petrolimex",
+          "Hạng mục chi phí / Loại năng lượng": "Dầu Diesel (DO) bồn tổng bến bãi cảng",
+          "Số lượng tiêu thụ": 95000,
+          "Đơn vị tính": "lít",
+          "Thành tiền (VNĐ)": 1995000000,
+          "Ghi chú / Phân xưởng sử dụng": "Nhiên liệu đội xe đầu kéo container đường dài và xe nâng bốc vỏ"
+        },
+        {
+          "Ngày hóa đơn": "18/02/2026",
+          "Số hóa đơn": "HĐ-EVN-008129",
+          "Nhà cung cấp": "Công ty Điện lực EVN",
+          "Hạng mục chi phí / Loại năng lượng": "Điện lưới EVN (Trạm biến áp kho bãi cảng)",
+          "Số lượng tiêu thụ": 1850000,
+          "Đơn vị tính": "kWh",
+          "Thành tiền (VNĐ)": 3700000000,
+          "Ghi chú / Phân xưởng sử dụng": "Cấp điện kho lạnh bảo quản hàng, cẩu bờ RTG điện và sạc xe nâng điện"
+        },
+        {
+          "Ngày hóa đơn": "21/02/2026",
+          "Số hóa đơn": "HĐ-PETRO-95-02",
+          "Nhà cung cấp": "Petrolimex",
+          "Hạng mục chi phí / Loại năng lượng": "Xăng RON 95 (Đội xe tải nhẹ trung chuyển)",
+          "Số lượng tiêu thụ": 3500,
+          "Đơn vị tính": "lít",
+          "Thành tiền (VNĐ)": 84000000,
+          "Ghi chú / Phân xưởng sử dụng": "Đội xe tải nhẹ giao nhận hàng chặng cuối trong đô thị"
+        },
+        {
+          "Ngày hóa đơn": "24/02/2026",
+          "Số hóa đơn": "HĐ-REF-404-03",
+          "Nhà cung cấp": "Thermo King Vietnam",
+          "Hạng mục chi phí / Loại năng lượng": "Môi chất lạnh R-404A",
+          "Số lượng tiêu thụ": 45,
+          "Đơn vị tính": "kg",
+          "Thành tiền (VNĐ)": 15750000,
+          "Ghi chú / Phân xưởng sử dụng": "Nạp bổ sung máy lạnh dàn xe container lạnh Reefer"
+        },
+        {
+          "Ngày hóa đơn": "27/02/2026",
+          "Số hóa đơn": "HĐ-GAS-LPG-04",
+          "Nhà cung cấp": "Gas Petrolimex",
+          "Hạng mục chi phí / Loại năng lượng": "Khí hóa lỏng (LPG)",
+          "Số lượng tiêu thụ": 2800,
+          "Đơn vị tính": "kg",
+          "Thành tiền (VNĐ)": 84000000,
+          "Ghi chú / Phân xưởng sử dụng": "Nhiên liệu xe nâng hàng chạy gas kho kín và nhà điều hành"
+        }
+      ]
+    };
+
+    function resolveAccountantIndustryKey(rawName) {
+      if (!rawName) return 'Thep_Luyen_Kim';
+      if (INDUSTRY_INVOICE_TEMPLATES[rawName]) return rawName;
+
+      const norm = (typeof window.removeVietnameseTones === 'function')
+        ? window.removeVietnameseTones(rawName).trim().toLowerCase()
+        : String(rawName).toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').trim();
+
+      if (window.INDUSTRY_16_ALIAS_MAP && window.INDUSTRY_16_ALIAS_MAP[norm]) {
+        const mapped = window.INDUSTRY_16_ALIAS_MAP[norm];
+        if (INDUSTRY_INVOICE_TEMPLATES[mapped]) return mapped;
+      }
+      if (window.INDUSTRY_16_ALIAS_MAP) {
+        for (const k in window.INDUSTRY_16_ALIAS_MAP) {
+          if (norm.includes(k) || k.includes(norm)) {
+            const mapped = window.INDUSTRY_16_ALIAS_MAP[k];
+            if (INDUSTRY_INVOICE_TEMPLATES[mapped]) return mapped;
+          }
+        }
+      }
+
+      if (norm.includes('nhom') || norm.includes('alu')) return 'Nhom_Luyen_Kim';
+      if (norm.includes('mang') || norm.includes('cement')) return 'Xi_Mang';
+      if (norm.includes('phan') || norm.includes('fertilizer')) return 'Phan_Bon';
+      if (norm.includes('nhua') || norm.includes('hoa chat') || norm.includes('plastic')) return 'Nhua_Hoa_Chat';
+      if (norm.includes('nhiet dien') || norm.includes('dien luc')) return 'Nhiet_Dien_Dien_Luc';
+      if (norm.includes('hydro')) return 'Hydrogen';
+      if (norm.includes('giay') || norm.includes('bao bi') || norm.includes('paper')) return 'Bao_Bi_Giay';
+      if (norm.includes('det') || norm.includes('may') || norm.includes('textile')) return 'Det_May';
+      if (norm.includes('da') || norm.includes('giay dep') || norm.includes('footwear')) return 'Da_Giay';
+      if (norm.includes('go') || norm.includes('noi that') || norm.includes('wood')) return 'Go_Noi_That';
+      if (norm.includes('dien tu') || norm.includes('ban dan') || norm.includes('electronic')) return 'Dien_Tu';
+      if (norm.includes('thuc pham') || norm.includes('do uong') || norm.includes('food')) return 'Thuc_Pham_Do_Uong';
+      if (norm.includes('co khi') || norm.includes('che tao') || norm.includes('mechanical')) return 'Co_Khi_Che_Tao';
+      if (norm.includes('nong') || norm.includes('chan nuoi') || norm.includes('agri')) return 'Nong_Nghiep';
+      if (norm.includes('van tai') || norm.includes('logistics')) return 'Van_Tai_Logistics';
+
+      return 'Thep_Luyen_Kim';
+    }
+
+    function getIndustryInvoiceTemplateRows(industryName) {
+      const key = resolveAccountantIndustryKey(industryName);
+      return INDUSTRY_INVOICE_TEMPLATES[key] || INDUSTRY_INVOICE_TEMPLATES['Thep_Luyen_Kim'];
+    }
+
     function downloadAccountantInvoiceTemplate() {
+      // 1. Xác định ngành nghề hiện tại từ giao diện / chi nhánh / công ty
+      let currentIndustry = '';
+      try {
+        const indSelect = document.getElementById('ci-setup-industry') || document.getElementById('setup-industry');
+        if (indSelect && indSelect.value && indSelect.value.trim().length > 0) {
+          currentIndustry = indSelect.value.trim();
+        }
+      } catch (e) {}
+
+      if (!currentIndustry) {
+        try {
+          const branchEl = document.getElementById('branch-selector');
+          const activeBranchName = (branchEl && branchEl.value) ? branchEl.value.trim() : '';
+          const userStr = localStorage.getItem('gs_current_user') || localStorage.getItem('greenshift_current_user');
+          const users = JSON.parse(localStorage.getItem('gs_users') || '[]');
+          const u = users.find(x => x.username === userStr || x.email === userStr) || {};
+          const comp = u.company || JSON.parse(localStorage.getItem('gs_v2_company') || localStorage.getItem('gs_company') || '{}');
+
+          if (activeBranchName && activeBranchName !== 'Trụ sở chính' && Array.isArray(comp.branches)) {
+            const matchedBranch = comp.branches.find(b => b && b.name && b.name.trim().toLowerCase() === activeBranchName.toLowerCase());
+            if (matchedBranch && matchedBranch.industry) {
+              currentIndustry = matchedBranch.industry;
+            }
+          }
+          if (!currentIndustry && comp.industry) {
+            currentIndustry = comp.industry;
+          }
+        } catch (e) {}
+      }
+
+      if (!currentIndustry) currentIndustry = 'Sắt Thép';
+
       try {
         const toast = document.createElement('div');
-        toast.textContent = 'Đang tải file Excel mẫu Bảng kê hóa đơn cho Kế toán...';
+        toast.textContent = `Đang tải file Excel mẫu Bảng kê hóa đơn cho ngành: ${currentIndustry}...`;
         toast.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#0284c7;color:#fff;padding:10px 22px;border-radius:8px;font-size:0.85rem;font-weight:600;z-index:99999;box-shadow:0 4px 16px rgba(0,0,0,0.2);';
         document.body.appendChild(toast);
         setTimeout(() => toast.remove(), 3500);
       } catch(e) {}
 
-      const sampleInvoiceRows = [
-        {
-          "Ngày hóa đơn": "15/02/2026",
-          "Số hóa đơn": "HĐ-EVN-0012948",
-          "Nhà cung cấp": "Công ty Điện lực EVN",
-          "Hạng mục chi phí / Loại năng lượng": "Điện lưới EVN (Tổng công tơ)",
-          "Số lượng tiêu thụ": 145200,
-          "Đơn vị tính": "kWh",
-          "Thành tiền (VNĐ)": 280000000,
-          "Ghi chú / Phân xưởng sử dụng": "Điện sản xuất toàn nhà máy Tháng 02/2026"
-        },
-        {
-          "Ngày hóa đơn": "18/02/2026",
-          "Số hóa đơn": "HĐ-PETRO-912",
-          "Nhà cung cấp": "Petrolimex",
-          "Hạng mục chi phí / Loại năng lượng": "Dầu Diesel (DO) bồn tổng",
-          "Số lượng tiêu thụ": 8000,
-          "Đơn vị tính": "lít",
-          "Thành tiền (VNĐ)": 168000000,
-          "Ghi chú / Phân xưởng sử dụng": "Nhập bồn dầu máy phát điện & lò luyện thép"
-        },
-        {
-          "Ngày hóa đơn": "20/02/2026",
-          "Số hóa đơn": "HĐ-PETRO-950",
-          "Nhà cung cấp": "Petrolimex",
-          "Hạng mục chi phí / Loại năng lượng": "Xăng RON 95 (Xe công ty)",
-          "Số lượng tiêu thụ": 450,
-          "Đơn vị tính": "lít",
-          "Thành tiền (VNĐ)": 10800000,
-          "Ghi chú / Phân xưởng sử dụng": "Nhiên liệu đội xe đưa đón & công tác"
-        },
-        {
-          "Ngày hóa đơn": "25/02/2026",
-          "Số hóa đơn": "HĐ-GAS-331",
-          "Nhà cung cấp": "Gas Petrolimex",
-          "Hạng mục chi phí / Loại năng lượng": "Khí hóa lỏng (LPG)",
-          "Số lượng tiêu thụ": 500,
-          "Đơn vị tính": "kg",
-          "Thành tiền (VNĐ)": 15000000,
-          "Ghi chú / Phân xưởng sử dụng": "Bình gas hóa lỏng cho bếp ăn & nhiệt luyện"
-        },
-        {
-          "Ngày hóa đơn": "26/02/2026",
-          "Số hóa đơn": "HĐ-COAL-0045",
-          "Nhà cung cấp": "Công ty Than Quảng Ninh",
-          "Hạng mục chi phí / Loại năng lượng": "Than antraxit",
-          "Số lượng tiêu thụ": 12000,
-          "Đơn vị tính": "kg",
-          "Thành tiền (VNĐ)": 36000000,
-          "Ghi chú / Phân xưởng sử dụng": "Nhiên liệu đốt lò hơi phụ trợ"
-        }
-      ];
+      const sampleInvoiceRows = getIndustryInvoiceTemplateRows(currentIndustry);
+      const indKey = resolveAccountantIndustryKey(currentIndustry);
+      const cleanInd = (typeof window.removeVietnameseTones === 'function')
+        ? window.removeVietnameseTones(currentIndustry).replace(/[^a-z0-9]+/gi, '_').replace(/^_+|_+$/g, '')
+        : indKey;
 
-      const sheetName = "Bang_Ke_Hoa_Don_Nang_Luong";
-      const fileName = "GreenShift_Mau_Bang_Ke_Hoa_Don_Ke_Toan";
+      const sheetName = `Hoa_Don_${cleanInd}`.substr(0, 31);
+      const fileName = `GreenShift_Mau_Hoa_Don_${cleanInd}`;
 
       if (typeof XLSX !== 'undefined') {
         const ws = XLSX.utils.json_to_sheet(sampleInvoiceRows);
         ws['!cols'] = [
           { wch: 16 },
           { wch: 22 },
-          { wch: 28 },
-          { wch: 38 },
+          { wch: 32 },
+          { wch: 45 },
           { wch: 20 },
           { wch: 14 },
-          { wch: 20 },
-          { wch: 45 }
+          { wch: 22 },
+          { wch: 55 }
         ];
         const wb = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(wb, ws, sheetName);
@@ -4763,7 +5746,7 @@
 
       try {
         const dlToast = document.createElement('div');
-        dlToast.textContent = 'Đã tải file mẫu Bảng kê Hóa đơn về máy! Bạn có thể điền số liệu rồi bấm "Tải Bảng kê HĐ" để nạp trực tiếp vào hệ thống.';
+        dlToast.textContent = `Đã tải file mẫu Bảng kê Hóa đơn (${currentIndustry}) về máy! Kế toán có thể điền số liệu rồi bấm "Tải Bảng kê HĐ" để nạp trực tiếp vào hệ thống.`;
         dlToast.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#166534;color:#fff;padding:12px 24px;border-radius:8px;font-size:0.85rem;z-index:99999;box-shadow:0 4px 16px rgba(0,0,0,0.2);max-width:90%;text-align:center;line-height:1.4;';
         document.body.appendChild(dlToast);
         setTimeout(() => dlToast.remove(), 4500);
@@ -5402,6 +6385,9 @@
     window.openActivityModal = openModal;
     window.closeActivityModal = closeModal;
     window.downloadAccountantInvoiceTemplate = downloadAccountantInvoiceTemplate;
+    window.INDUSTRY_INVOICE_TEMPLATES = INDUSTRY_INVOICE_TEMPLATES;
+    window.getIndustryInvoiceTemplateRows = getIndustryInvoiceTemplateRows;
+    window.resolveAccountantIndustryKey = resolveAccountantIndustryKey;
     window.handleInvoiceExcelImport = handleInvoiceExcelImport;
     window.parseInvoiceSheetRows = parseInvoiceSheetRows;
     window.openInvoiceImportPreviewModal = openInvoiceImportPreviewModal;

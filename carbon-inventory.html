@@ -5179,7 +5179,12 @@
           sourceSelfEvalBox.style.display = 'none';
         }
       }
-      if (sourceMeterBox) sourceMeterBox.style.display = (measure === 'Đo liên tục' || measure === 'Đo định kỳ (không liên tục)') ? 'block' : 'none';
+      if (sourceMeterBox) {
+        const cat = currentSourceCategory || (currentEditingSourceRow ? currentEditingSourceRow.dataset.category : '');
+        const isFugitiveOrWaste = (cat === 'Phát thải thất thoát' || cat === 'Xử lý chất thải / Nước thải' || cat === 'Xử lý chất thải phát sinh');
+        const isMeterApplicable = (measure === 'Đo liên tục') && !isFugitiveOrWaste;
+        sourceMeterBox.style.display = isMeterApplicable ? 'block' : 'none';
+      }
       if (sourceAccountantBox) sourceAccountantBox.style.display = (measure === 'Ước tính kế toán tài chính') ? 'block' : 'none';
     }
 

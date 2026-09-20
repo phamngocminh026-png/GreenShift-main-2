@@ -122,6 +122,34 @@
       isFacility: 'true',
       scope: 1,
       keywords: ['r-410a', 'r410a', 'r-32', 'r32', 'r-134a', 'r134a', 'gas lạnh', 'môi chất lạnh']
+    },
+    {
+      id: 'src_fac_fuel_oil',
+      name: 'Dầu FO (Fuel Oil / Mazut) mua ngoài',
+      category: 'Đốt cháy cố định',
+      type: 'Đốt cháy cố định',
+      ef: 'Dầu FO (Fuel Oil)',
+      efFactor: getMasterFuelFactor('fuel_oil', '3.101'),
+      efUnit: 'kgCO2e/kg',
+      unit: 'kg',
+      measure: 'weight',
+      isFacility: 'true',
+      scope: 1,
+      keywords: ['dầu fo', 'dau fo', 'fuel oil', 'dầu mazut', 'dau mazut', 'dầu nặng fo', 'dau nang fo', 'fo 380']
+    },
+    {
+      id: 'src_fac_natural_gas',
+      name: 'Khí tự nhiên (LNG / CNG / Khí thiên nhiên) mua ngoài',
+      category: 'Đốt cháy cố định',
+      type: 'Đốt cháy cố định',
+      ef: 'Khí tự nhiên hóa lỏng (LNG)',
+      efFactor: getMasterFuelFactor('natural_gas', '2.693'),
+      efUnit: 'kgCO2e/kg',
+      unit: 'kg',
+      measure: 'weight',
+      isFacility: 'true',
+      scope: 1,
+      keywords: ['lng', 'cng', 'khí tự nhiên', 'khi tu nhien', 'khí thiên nhiên', 'khi thien nhien', 'natural gas']
     }
   ];
 
@@ -148,6 +176,18 @@
     // Ưu tiên khớp chính xác xăng / nhiên liệu động trước để tránh nhà cung cấp Petrolimex nhận nhầm thành Diesel
     if (s.includes('xăng') || s.includes('xang') || s.includes('ron 95') || s.includes('ron 92') || s.includes('e5') || s.includes('mogas')) {
       return FACILITY_ENERGY_SOURCES[2];
+    }
+
+    // Ưu tiên khớp chính xác dầu FO / Mazut trước để tránh từ khóa "dầu" nhận nhầm thành Diesel
+    if (s.includes('fo') || s.includes('mazut') || s.includes('fuel oil')) {
+      const foSrc = FACILITY_ENERGY_SOURCES.find(x => x.id === 'src_fac_fuel_oil');
+      if (foSrc) return foSrc;
+    }
+
+    // Ưu tiên khớp chính xác khí tự nhiên / LNG / CNG
+    if (s.includes('lng') || s.includes('cng') || s.includes('khí tự nhiên') || s.includes('khi tu nhien') || s.includes('khí thiên nhiên')) {
+      const gasSrc = FACILITY_ENERGY_SOURCES.find(x => x.id === 'src_fac_natural_gas');
+      if (gasSrc) return gasSrc;
     }
 
     for (const src of FACILITY_ENERGY_SOURCES) {

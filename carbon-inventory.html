@@ -2964,7 +2964,12 @@
       'Đốt cháy động':                                       { label: 'Loại 1', scope: 1 },
       'Đốt cháy di động':                                    { label: 'Loại 1', scope: 1 },
       'Phát thải thất thoát':                                { label: 'Loại 1', scope: 1 },
+      'Phát thải rò rỉ':                                     { label: 'Loại 1', scope: 1 },
       'Các quá trình công nghiệp':                           { label: 'Loại 1', scope: 1 },
+      'Xử lý chất thải / Nước thải':                        { label: 'Loại 1', scope: 1 },
+      'Xử lý nước thải nội bộ':                              { label: 'Loại 1', scope: 1 },
+      'Xử lý nước thải':                                     { label: 'Loại 1', scope: 1 },
+      'Bể tự hoại':                                          { label: 'Loại 1', scope: 1 },
       'Sử dụng đất, thay đổi sử dụng đất và lâm nghiệp (LULUCF)': { label: 'Loại 1', scope: 1 },
       
       // Scope 2 (Loại 2 - Gián tiếp từ năng lượng mua ngoài)
@@ -3085,6 +3090,10 @@
       if (str.includes('điện') || str.includes('kwh') || str.includes('evn') || str.includes('nhiệt') || str.includes('hơi')) {
         return { label: 'Loại 2', scope: 2 };
       }
+      // Nhận diện Scope 1: Xử lý nước thải nội bộ / Bể tự hoại tại cơ sở (Theo ISO 14064-1 & NĐ 06/2022/NĐ-CP)
+      if (str.includes('nước thải') || str.includes('bể tự hoại') || str.includes('wwtp') || (str.includes('xử lý chất thải') && !str.includes('phát sinh') && !str.includes('thu gom'))) {
+        return { label: 'Loại 1', scope: 1 };
+      }
       // Nhận diện Scope 1: Đốt cháy, Rò rỉ, Quá trình công nghiệp, LULUCF
       if (str.includes('cố định') || str.includes('động') || str.includes('thất thoát') || str.includes('rò rỉ') || str.includes('công nghiệp') || str.includes('lulucf') || str.includes('diesel') || str.includes('xăng') || str.includes('lpg') || str.includes('than')) {
         return { label: 'Loại 1', scope: 1 };
@@ -3093,7 +3102,7 @@
       if (str.includes('vận chuyển') || str.includes('đi lại') || str.includes('công tác')) {
         return { label: 'Loại 3', scope: 3 };
       }
-      // Nhận diện Scope 3: Hàng hóa, Rác thải, Dịch vụ
+      // Nhận diện Scope 3: Hàng hóa, Rác thải chuyển đi, Dịch vụ
       if (str.includes('hàng hóa') || str.includes('chất thải') || str.includes('dịch vụ') || str.includes('sản phẩm')) {
         return { label: 'Loại 4', scope: 3 };
       }
@@ -5231,7 +5240,7 @@
       const qtyInput = document.getElementById('source-op-quantity');
       const qty = parseInt(qtyInput ? qtyInput.value : 1, 10) || 1;
       const totalCap = Math.round(cap * qty * 1000) / 1000;
-      const unit = (sourceOpCapUnit && sourceOpCapUnit.value) ? sourceOpCapUnit.value : 'đơn vị';
+      const unit = (sourceOpCapUnit && sourceOpCapUnit.value) ? sourceOpCapUnit.value.trim() : 'đơn vị';
       const load = (parseFloat(sourceOpLoad ? sourceOpLoad.value : 80) || 80) / 100;
       const h = parseFloat(sourceOpHoursDay ? sourceOpHoursDay.value : 16) || 16;
       const d = parseFloat(sourceOpDaysWeek ? sourceOpDaysWeek.value : 6) || 6;
@@ -5241,19 +5250,75 @@
       if (qtyLabel) qtyLabel.innerText = qty;
       if (totalCapEl) totalCapEl.innerText = `${totalCap.toLocaleString('vi-VN')} ${unit}`;
 
-      const hourly = Math.round(totalCap * load * 1000) / 1000;
-      const daily = Math.round(hourly * h * 1000) / 1000;
-      const annual = Math.round(daily * d * 52 * 1000) / 1000;
+      const uLower = unit.toLowerCase();
+      let hourly = 0;
+      let daily = 0;
+      let annual = 0;
+      let rateUnitH = `${unit}/h`;
+      let rateUnitD = `${unit}/ngày`;
+      let rateUnitY = `${unit}/năm`;
 
-      sourceCalcHourly.innerText = `${hourly.toLocaleString('vi-VN')} ${unit}/h`;
-      sourceCalcDaily.innerText = `${daily.toLocaleString('vi-VN')} ${unit}/ngày`;
-      sourceCalcAnnual.innerText = `${annual.toLocaleString('vi-VN')} ${unit}/năm`;
+      if (uLower.includes('/năm') || uLower.includes('/nam')) {
+        const baseUnit = unit.replace(/\/năm|\/nam/i, '').trim();
+        annual = totalCap * load;
+        const workDays = Math.min(365, Math.round(d * 52)) || 300;
+        daily = workDays > 0 ? (annual / workDays) : 0;
+        hourly = h > 0 ? (daily / h) : 0;
+        rateUnitH = '—';
+        rateUnitD = `${baseUnit}/ngày`;
+        rateUnitY = `${baseUnit}/năm`;
+      } else if (uLower.includes('/tháng') || uLower.includes('/thang')) {
+        const baseUnit = unit.replace(/\/tháng|\/thang/i, '').trim();
+        const monthly = totalCap * load;
+        annual = monthly * 12;
+        daily = monthly / (d * 4.33 || 26);
+        hourly = h > 0 ? (daily / h) : 0;
+        rateUnitH = `${baseUnit}/h`;
+        rateUnitD = `${baseUnit}/ngày`;
+        rateUnitY = `${baseUnit}/năm`;
+      } else if (uLower.includes('/h')) {
+        const baseUnit = unit.replace(/\/h/i, '').trim();
+        hourly = Math.round(totalCap * load * 1000) / 1000;
+        daily = Math.round(hourly * h * 1000) / 1000;
+        annual = Math.round(daily * d * 52 * 1000) / 1000;
+        rateUnitH = unit;
+        rateUnitD = `${baseUnit}/ngày`;
+        rateUnitY = `${baseUnit}/năm`;
+      } else if (uLower === 'kw' || uLower === 'kva') {
+        hourly = Math.round(totalCap * load * 1000) / 1000;
+        daily = Math.round(hourly * h * 1000) / 1000;
+        annual = Math.round(daily * d * 52 * 1000) / 1000;
+        rateUnitH = `${unit}`;
+        rateUnitD = 'kWh/ngày';
+        rateUnitY = 'kWh/năm';
+      } else {
+        hourly = Math.round(totalCap * load * 1000) / 1000;
+        daily = Math.round(hourly * h * 1000) / 1000;
+        annual = Math.round(daily * d * 52 * 1000) / 1000;
+      }
+
+      hourly = Math.round(hourly * 1000) / 1000;
+      daily = Math.round(daily * 1000) / 1000;
+      annual = Math.round(annual * 1000) / 1000;
+
+      sourceCalcHourly.innerText = `${hourly.toLocaleString('vi-VN')} ${rateUnitH}`;
+      sourceCalcDaily.innerText = `${daily.toLocaleString('vi-VN')} ${rateUnitD}`;
+      sourceCalcAnnual.innerText = `${annual.toLocaleString('vi-VN')} ${rateUnitY}`;
 
       const efFactorInput = document.getElementById('source-ef-factor');
-      const efVal = parseFloat(efFactorInput && efFactorInput.value ? efFactorInput.value : 0.6766) || 0.6766;
-      const annualEmissions = Math.round((annual * efVal / 1000) * 100) / 100;
+      let efVal = parseFloat(efFactorInput && efFactorInput.value ? efFactorInput.value : 0.6766) || 0.6766;
+      let annualEmissions = 0;
+
+      if (uLower.includes('tấn') || uLower.includes('tan') || uLower === 't') {
+        let efInT = (efVal > 5) ? (efVal / 1000) : efVal;
+        annualEmissions = Math.round(annual * efInT * 100) / 100;
+      } else {
+        let efNorm = (efVal > 100) ? (efVal / 1000) : efVal;
+        annualEmissions = Math.round((annual * efNorm / 1000) * 100) / 100;
+      }
+
       if (sourceCalcEmissions) {
-        sourceCalcEmissions.innerText = `${annualEmissions.toLocaleString('vi-VN')} tCO2e/năm`;
+        sourceCalcEmissions.innerText = `${annualEmissions.toLocaleString('vi-VN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} tCO2e/năm`;
       }
     }
 
@@ -5580,6 +5645,7 @@
             document.getElementById('source-ef-factor').value = row.dataset.efFactor || '';
             document.getElementById('source-ef-unit').value = row.dataset.efUnit || '';
             document.getElementById('source-ef-source').value = row.dataset.efSource || '';
+            if (typeof recalcSourceSelfEval === 'function') recalcSourceSelfEval();
           }, 50);
         }, 50);
       });

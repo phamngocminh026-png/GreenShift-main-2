@@ -152,12 +152,22 @@
 
     wrapper.innerHTML = html;
 
-    // Set selected industry for each branch
+    // Set selected industry for each branch (default to parent company industry if not specified)
+    const parentIndEl = document.getElementById('ci-setup-industry') || document.getElementById('setup-industry');
+    const defaultBranchIndustry = (parentIndEl && parentIndEl.value) ? parentIndEl.value.trim() : 'Nhôm';
+
     for (let i = 1; i <= numBranches; i++) {
       const bData = (existingBranches && existingBranches[i - 1]) ? existingBranches[i - 1] : {};
       const selectEl = document.getElementById(`ci-branch-industry-${i}`);
-      if (selectEl && bData.industry) {
-        selectEl.value = bData.industry;
+      if (selectEl) {
+        if (bData.industry) {
+          selectEl.value = bData.industry;
+        } else if (defaultBranchIndustry) {
+          selectEl.value = defaultBranchIndustry;
+        }
+        selectEl.addEventListener('change', () => {
+          selectEl.dataset.customized = 'true';
+        });
       }
     }
   }
@@ -557,6 +567,19 @@
       branchesInput.addEventListener('input', function () {
         const { company } = getCurrentUserData();
         renderBranchCards(this.value, (company && company.branches) ? company.branches : []);
+      });
+    }
+
+    const industryInput = document.getElementById('ci-setup-industry');
+    if (industryInput) {
+      industryInput.addEventListener('change', function () {
+        const newInd = this.value;
+        const branchSelects = document.querySelectorAll('[id^="ci-branch-industry-"]');
+        branchSelects.forEach(sel => {
+          if (!sel.dataset.customized) {
+            sel.value = newInd;
+          }
+        });
       });
     }
 

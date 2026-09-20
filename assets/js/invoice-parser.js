@@ -35,7 +35,7 @@
       measure: 'volume',
       isFacility: 'true',
       scope: 1,
-      keywords: ['dầu', 'dau', 'diesel', 'diezen', 'do 0,05s', 'do 0.05s', 'petrolimex']
+      keywords: ['dầu', 'dau', 'diesel', 'diezen', 'do 0,05s', 'do 0.05s']
     },
     {
       id: 'src_fac_electricity',
@@ -144,6 +144,12 @@
   function matchFacilitySource(text) {
     if (!text) return UNMATCHED_FACILITY_SOURCE;
     const s = text.toLowerCase();
+
+    // Ưu tiên khớp chính xác xăng / nhiên liệu động trước để tránh nhà cung cấp Petrolimex nhận nhầm thành Diesel
+    if (s.includes('xăng') || s.includes('xang') || s.includes('ron 95') || s.includes('ron 92') || s.includes('e5') || s.includes('mogas')) {
+      return FACILITY_ENERGY_SOURCES[2];
+    }
+
     for (const src of FACILITY_ENERGY_SOURCES) {
       if (src.keywords.some(k => s.includes(k))) {
         return src;
@@ -153,6 +159,9 @@
     if (s.includes('kwh')) return FACILITY_ENERGY_SOURCES[1];
     if (/\b(lít|lit)\b/.test(s) && (s.includes('dầu') || s.includes('xăng') || s.includes('nhiên liệu'))) {
       if (s.includes('xăng') || s.includes('ron')) return FACILITY_ENERGY_SOURCES[2];
+      return FACILITY_ENERGY_SOURCES[0];
+    }
+    if (s.includes('petrolimex') && (/\b(lít|lit|l\b)/.test(s) || s.includes('diesel') || s.includes('do'))) {
       return FACILITY_ENERGY_SOURCES[0];
     }
     // Tuyệt đối không tự tiện fallback về Dầu Diesel khi không khớp từ khóa

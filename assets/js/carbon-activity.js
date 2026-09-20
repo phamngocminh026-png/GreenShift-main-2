@@ -4468,6 +4468,538 @@
       }
     };
 
+    // =========================================================================
+    // PHÂN HỆ KẾ TOÁN: BẢNG KÊ HÓA ĐƠN EXCEL (FILE MẪU, BÓC TÁCH & ĐỐI SOÁT NẠP HÀNG LOẠT)
+    // =========================================================================
+    let _parsedInvoiceRows = [];
+
+    function downloadAccountantInvoiceTemplate() {
+      try {
+        const toast = document.createElement('div');
+        toast.textContent = 'Đang tải file Excel mẫu Bảng kê hóa đơn cho Kế toán...';
+        toast.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#0284c7;color:#fff;padding:10px 22px;border-radius:8px;font-size:0.85rem;font-weight:600;z-index:99999;box-shadow:0 4px 16px rgba(0,0,0,0.2);';
+        document.body.appendChild(toast);
+        setTimeout(() => toast.remove(), 3500);
+      } catch(e) {}
+
+      const sampleInvoiceRows = [
+        {
+          "Ngày hóa đơn": "15/02/2026",
+          "Số hóa đơn": "HĐ-EVN-0012948",
+          "Nhà cung cấp": "Công ty Điện lực EVN",
+          "Hạng mục chi phí / Loại năng lượng": "Điện lưới EVN (Tổng công tơ)",
+          "Số lượng tiêu thụ": 145200,
+          "Đơn vị tính": "kWh",
+          "Thành tiền (VNĐ)": 280000000,
+          "Ghi chú / Phân xưởng sử dụng": "Điện sản xuất toàn nhà máy Tháng 02/2026"
+        },
+        {
+          "Ngày hóa đơn": "18/02/2026",
+          "Số hóa đơn": "HĐ-PETRO-912",
+          "Nhà cung cấp": "Petrolimex",
+          "Hạng mục chi phí / Loại năng lượng": "Dầu Diesel (DO) bồn tổng",
+          "Số lượng tiêu thụ": 8000,
+          "Đơn vị tính": "lít",
+          "Thành tiền (VNĐ)": 168000000,
+          "Ghi chú / Phân xưởng sử dụng": "Nhập bồn dầu máy phát điện & lò luyện thép"
+        },
+        {
+          "Ngày hóa đơn": "20/02/2026",
+          "Số hóa đơn": "HĐ-PETRO-950",
+          "Nhà cung cấp": "Petrolimex",
+          "Hạng mục chi phí / Loại năng lượng": "Xăng RON 95 (Xe công ty)",
+          "Số lượng tiêu thụ": 450,
+          "Đơn vị tính": "lít",
+          "Thành tiền (VNĐ)": 10800000,
+          "Ghi chú / Phân xưởng sử dụng": "Nhiên liệu đội xe đưa đón & công tác"
+        },
+        {
+          "Ngày hóa đơn": "25/02/2026",
+          "Số hóa đơn": "HĐ-GAS-331",
+          "Nhà cung cấp": "Gas Petrolimex",
+          "Hạng mục chi phí / Loại năng lượng": "Khí hóa lỏng (LPG)",
+          "Số lượng tiêu thụ": 500,
+          "Đơn vị tính": "kg",
+          "Thành tiền (VNĐ)": 15000000,
+          "Ghi chú / Phân xưởng sử dụng": "Bình gas hóa lỏng cho bếp ăn & nhiệt luyện"
+        },
+        {
+          "Ngày hóa đơn": "26/02/2026",
+          "Số hóa đơn": "HĐ-COAL-0045",
+          "Nhà cung cấp": "Công ty Than Quảng Ninh",
+          "Hạng mục chi phí / Loại năng lượng": "Than antraxit",
+          "Số lượng tiêu thụ": 12000,
+          "Đơn vị tính": "kg",
+          "Thành tiền (VNĐ)": 36000000,
+          "Ghi chú / Phân xưởng sử dụng": "Nhiên liệu đốt lò hơi phụ trợ"
+        }
+      ];
+
+      const sheetName = "Bang_Ke_Hoa_Don_Nang_Luong";
+      const fileName = "GreenShift_Mau_Bang_Ke_Hoa_Don_Ke_Toan";
+
+      if (typeof XLSX !== 'undefined') {
+        const ws = XLSX.utils.json_to_sheet(sampleInvoiceRows);
+        ws['!cols'] = [
+          { wch: 16 },
+          { wch: 22 },
+          { wch: 28 },
+          { wch: 38 },
+          { wch: 20 },
+          { wch: 14 },
+          { wch: 20 },
+          { wch: 45 }
+        ];
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, sheetName);
+        XLSX.writeFile(wb, `${fileName}.xlsx`);
+      } else {
+        let csv = "\uFEFFNgày hóa đơn,Số hóa đơn,Nhà cung cấp,Hạng mục chi phí / Loại năng lượng,Số lượng tiêu thụ,Đơn vị tính,Thành tiền (VNĐ),Ghi chú / Phân xưởng sử dụng\n";
+        sampleInvoiceRows.forEach(row => {
+          csv += `"${row['Ngày hóa đơn']}","${row['Số hóa đơn']}","${row['Nhà cung cấp']}","${row['Hạng mục chi phí / Loại năng lượng']}","${row['Số lượng tiêu thụ']}","${row['Đơn vị tính']}","${row['Thành tiền (VNĐ)']}","${row['Ghi chú / Phân xưởng sử dụng']}"\n`;
+        });
+        const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+        const link = document.createElement("a");
+        link.href = URL.createObjectURL(blob);
+        link.download = `${fileName}.csv`;
+        document.body.appendChild(link);
+        link.click();
+        link.remove();
+      }
+
+      try {
+        const dlToast = document.createElement('div');
+        dlToast.textContent = 'Đã tải file mẫu Bảng kê Hóa đơn về máy! Bạn có thể điền số liệu rồi bấm "Tải Bảng kê HĐ" để nạp trực tiếp vào hệ thống.';
+        dlToast.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#166534;color:#fff;padding:12px 24px;border-radius:8px;font-size:0.85rem;z-index:99999;box-shadow:0 4px 16px rgba(0,0,0,0.2);max-width:90%;text-align:center;line-height:1.4;';
+        document.body.appendChild(dlToast);
+        setTimeout(() => dlToast.remove(), 4500);
+      } catch(e) {}
+    }
+
+    function findRowVal(row, candidates) {
+      if (!row || typeof row !== 'object') return '';
+      for (const c of candidates) {
+        if (row[c] !== undefined && row[c] !== null && String(row[c]).trim() !== '') {
+          return String(row[c]).trim();
+        }
+      }
+      const keys = Object.keys(row);
+      for (const c of candidates) {
+        const cNorm = c.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]/g, '');
+        for (const k of keys) {
+          const kNorm = k.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]/g, '');
+          if (kNorm === cNorm || kNorm.includes(cNorm) || cNorm.includes(kNorm)) {
+            if (row[k] !== undefined && row[k] !== null && String(row[k]).trim() !== '') {
+              return String(row[k]).trim();
+            }
+          }
+        }
+      }
+      return '';
+    }
+
+    function normalizeSheetDate(val) {
+      if (!val) return new Date().toISOString().slice(0, 10);
+      const s = String(val).trim();
+      if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+      const vnMatch = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/);
+      if (vnMatch) {
+        const d = vnMatch[1].padStart(2, '0');
+        const m = vnMatch[2].padStart(2, '0');
+        const y = vnMatch[3];
+        return `${y}-${m}-${d}`;
+      }
+      const num = parseFloat(s);
+      if (!isNaN(num) && num > 30000 && num < 60000) {
+        try {
+          const d = new Date(Math.round((num - 25569) * 86400 * 1000));
+          return d.toISOString().slice(0, 10);
+        } catch(e) {}
+      }
+      return new Date().toISOString().slice(0, 10);
+    }
+
+    function parseInvoiceSheetRows(rows) {
+      const parsed = [];
+      const facSources = (window.InvoiceParser && window.InvoiceParser.FACILITY_ENERGY_SOURCES)
+        ? window.InvoiceParser.FACILITY_ENERGY_SOURCES
+        : [];
+
+      rows.forEach((r, idx) => {
+        const rawDate = findRowVal(r, ['Ngày hóa đơn', 'Ngày lập', 'Ngày HĐ', 'Ngày', 'Date', 'InvoiceDate']);
+        const rawInvNo = findRowVal(r, ['Số hóa đơn', 'Số HĐ', 'Số chứng từ', 'Số HĐ / Chứng từ', 'InvoiceNumber', 'InvNum', 'SHDon', 'Số']);
+        const rawSeller = findRowVal(r, ['Nhà cung cấp', 'Đơn vị bán', 'Người bán', 'Tên người bán', 'Supplier', 'Seller', 'Vendor']);
+        const rawItem = findRowVal(r, ['Hạng mục chi phí / Loại năng lượng', 'Hạng mục', 'Hàng hóa', 'Tên hàng', 'Mặt hàng', 'Chi phí', 'Loại năng lượng', 'ItemName', 'Category', 'Tên hàng hóa dịch vụ']);
+        const rawQtyStr = findRowVal(r, ['Số lượng tiêu thụ', 'Số lượng', 'Lượng dùng', 'Lượng tiêu thụ', 'SL', 'Quantity', 'Qty']);
+        const rawUnit = findRowVal(r, ['Đơn vị tính', 'Đơn vị', 'ĐVT', 'Unit']);
+        const rawAmount = findRowVal(r, ['Thành tiền (VNĐ)', 'Thành tiền', 'Tổng tiền', 'Tiền', 'Amount', 'TotalAmount']);
+        const rawNote = findRowVal(r, ['Ghi chú / Phân xưởng sử dụng', 'Ghi chú', 'Diễn giải', 'Mục đích', 'Note', 'Description']);
+
+        const parseNum = (window.InvoiceParser && typeof window.InvoiceParser.normalizeQuantity === 'function')
+          ? window.InvoiceParser.normalizeQuantity
+          : ((typeof window.parseVnNumber === 'function') ? window.parseVnNumber : parseFloat);
+
+        const qty = parseNum(rawQtyStr);
+        if (qty <= 0 && !rawItem && !rawInvNo) return; // Bỏ qua dòng trống
+
+        const dateIso = normalizeSheetDate(rawDate);
+        const combinedText = `${rawItem} ${rawSeller} ${rawUnit} ${rawNote}`;
+
+        let matchedSrc = null;
+        if (window.InvoiceParser && typeof window.InvoiceParser.matchFacilitySource === 'function') {
+          matchedSrc = window.InvoiceParser.matchFacilitySource(combinedText);
+        }
+
+        const isMatched = Boolean(matchedSrc && !matchedSrc.unmatched && matchedSrc.id !== 'src_fac_unmatched');
+        const fallbackSrc = facSources[0] || {
+          id: 'src_fac_electricity',
+          name: 'Điện lưới EVN mua ngoài (Tổng công tơ nhà máy)',
+          type: 'Điện mua vào',
+          ef: 'Điện lưới Việt Nam',
+          efFactor: '0.6766',
+          unit: 'kWh'
+        };
+
+        const targetSrc = isMatched ? matchedSrc : fallbackSrc;
+        const factor = parseFloat(targetSrc.efFactor) || 0;
+        const finalUnit = rawUnit || targetSrc.unit || 'kWh';
+        const co2e = qty * factor;
+
+        parsed.push({
+          index: idx,
+          date: dateIso,
+          invoiceNo: rawInvNo,
+          seller: rawSeller,
+          rawItem: rawItem,
+          sourceId: targetSrc.id,
+          sourceName: targetSrc.name,
+          sourceType: targetSrc.type || 'Đốt cháy cố định',
+          efName: targetSrc.ef || targetSrc.name,
+          factor: factor,
+          quantity: qty,
+          unit: finalUnit,
+          amountVnd: parseNum(rawAmount),
+          note: rawNote,
+          co2e: co2e,
+          isMatched: isMatched
+        });
+      });
+
+      return parsed;
+    }
+
+    function handleInvoiceExcelImport(file) {
+      if (!file) return;
+      const reader = new FileReader();
+
+      reader.onload = function(evt) {
+        try {
+          let rows = [];
+          if (typeof XLSX !== 'undefined') {
+            const data = new Uint8Array(evt.target.result);
+            const workbook = XLSX.read(data, { type: 'array' });
+            const firstSheet = workbook.SheetNames[0];
+            rows = XLSX.utils.sheet_to_json(workbook.Sheets[firstSheet], { defval: '' });
+          } else {
+            const text = new TextDecoder('utf-8').decode(evt.target.result);
+            const lines = text.split(/\r?\n/).filter(l => l.trim().length > 0);
+            if (lines.length > 1) {
+              const headers = lines[0].split(',').map(h => h.replace(/^["']|["']$/g, '').trim());
+              for (let i = 1; i < lines.length; i++) {
+                const vals = lines[i].split(',').map(v => v.replace(/^["']|["']$/g, '').trim());
+                const row = {};
+                headers.forEach((h, idx) => { row[h] = vals[idx] || ''; });
+                rows.push(row);
+              }
+            }
+          }
+
+          if (!rows || rows.length === 0) {
+            alert('File không có dữ liệu hoặc không đúng định dạng bảng kê!');
+            return;
+          }
+
+          const parsedRows = parseInvoiceSheetRows(rows);
+          if (parsedRows.length === 0) {
+            alert('Không tìm thấy dòng dữ liệu hóa đơn hợp lệ trong file!');
+            return;
+          }
+
+          openInvoiceImportPreviewModal(parsedRows);
+        } catch (err) {
+          console.error('[Invoice Import] Lỗi đọc file Excel:', err);
+          alert('Đã xảy ra lỗi khi đọc file bảng kê hóa đơn: ' + err.message);
+        }
+      };
+
+      if (typeof XLSX !== 'undefined') {
+        reader.readAsArrayBuffer(file);
+      } else {
+        reader.readAsText(file);
+      }
+    }
+
+    function openInvoiceImportPreviewModal(parsedRows) {
+      const modal = document.getElementById('modal-invoice-import-preview');
+      if (!modal) return;
+      _parsedInvoiceRows = parsedRows || [];
+
+      const tbody = document.getElementById('invoice-preview-tbody');
+      const statTotal = document.getElementById('inv-stat-total');
+      const statMatched = document.getElementById('inv-stat-matched');
+      const statUnmatched = document.getElementById('inv-stat-unmatched');
+      const statUnmatchedBox = document.getElementById('inv-stat-unmatched-box');
+      const statEmission = document.getElementById('inv-stat-total-emission');
+
+      if (statTotal) statTotal.innerText = _parsedInvoiceRows.length;
+
+      let matchedCount = 0;
+      let unmatchedCount = 0;
+      let totalCo2e = 0;
+
+      const facSources = (window.InvoiceParser && window.InvoiceParser.FACILITY_ENERGY_SOURCES)
+        ? window.InvoiceParser.FACILITY_ENERGY_SOURCES
+        : [];
+
+      if (tbody) {
+        tbody.innerHTML = '';
+        _parsedInvoiceRows.forEach((row, idx) => {
+          if (row.isMatched) matchedCount++;
+          else unmatchedCount++;
+          totalCo2e += (row.co2e || 0);
+
+          const tr = document.createElement('tr');
+          tr.style.borderBottom = '1px solid #e2e8f0';
+
+          let selectOptionsHtml = '';
+          facSources.forEach(src => {
+            const isSel = (src.id === row.sourceId) ? 'selected' : '';
+            selectOptionsHtml += `<option value="${src.id}" data-factor="${src.efFactor}" data-unit="${src.unit}" data-ef="${src.ef}" data-name="${src.name}" ${isSel}>${src.name}</option>`;
+          });
+
+          const badgeHtml = row.isMatched
+            ? `<span style="background: #dcfce7; color: #15803d; border: 1px solid #bbf7d0; font-size: 0.72rem; font-weight: 600; padding: 1px 6px; border-radius: 10px; margin-left: 4px; white-space: nowrap;">Tự động khớp</span>`
+            : `<span style="background: #fef3c7; color: #b45309; border: 1px solid #fde68a; font-size: 0.72rem; font-weight: 600; padding: 1px 6px; border-radius: 10px; margin-left: 4px; white-space: nowrap;">Cần chọn</span>`;
+
+          tr.innerHTML = `
+            <td style="padding: 8px 10px; text-align: center; color: #64748b;">${idx + 1}</td>
+            <td style="padding: 8px 10px; font-weight: 500; white-space: nowrap;">${row.date}</td>
+            <td style="padding: 8px 10px; font-weight: 600; color: #1e293b;">${row.invoiceNo || '—'}</td>
+            <td style="padding: 8px 10px; color: #475569;">${row.seller || '—'}</td>
+            <td style="padding: 8px 10px; color: #334155;">${row.rawItem || '—'}</td>
+            <td style="padding: 8px 10px;">
+              <div style="display: flex; align-items: center; gap: 4px;">
+                <select class="inv-preview-src-select" data-index="${idx}" style="flex: 1; padding: 4px 6px; font-size: 0.78rem; border: 1px solid #cbd5e1; border-radius: 4px; background: #fff;">
+                  ${selectOptionsHtml}
+                </select>
+                ${badgeHtml}
+              </div>
+            </td>
+            <td style="padding: 8px 10px; text-align: right; font-weight: 600; color: #0f172a;">${(row.quantity || 0).toLocaleString('vi-VN')}</td>
+            <td style="padding: 8px 10px; text-align: center; color: #64748b;">${row.unit || ''}</td>
+            <td style="padding: 8px 10px; text-align: right; font-weight: 600; color: #15803d;">${(row.co2e || 0).toLocaleString('vi-VN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+          `;
+
+          tbody.appendChild(tr);
+        });
+
+        tbody.querySelectorAll('.inv-preview-src-select').forEach(sel => {
+          sel.addEventListener('change', function() {
+            const rowIdx = parseInt(this.dataset.index, 10);
+            const opt = this.options[this.selectedIndex];
+            if (!_parsedInvoiceRows[rowIdx]) return;
+            const newSrcId = this.value;
+            const newFactor = parseFloat(opt.dataset.factor) || 0;
+            const newUnit = opt.dataset.unit || _parsedInvoiceRows[rowIdx].unit;
+            const newEf = opt.dataset.ef || '';
+            const newSrcName = opt.dataset.name || opt.text;
+
+            _parsedInvoiceRows[rowIdx].sourceId = newSrcId;
+            _parsedInvoiceRows[rowIdx].sourceName = newSrcName;
+            _parsedInvoiceRows[rowIdx].factor = newFactor;
+            _parsedInvoiceRows[rowIdx].unit = newUnit;
+            _parsedInvoiceRows[rowIdx].efName = newEf;
+            _parsedInvoiceRows[rowIdx].co2e = _parsedInvoiceRows[rowIdx].quantity * newFactor;
+            _parsedInvoiceRows[rowIdx].isMatched = true;
+
+            let newTotalCo2e = 0;
+            _parsedInvoiceRows.forEach(r => { newTotalCo2e += (r.co2e || 0); });
+            if (statEmission) {
+              statEmission.innerText = newTotalCo2e.toLocaleString('vi-VN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            }
+            const trParent = this.closest('tr');
+            if (trParent && trParent.cells[8]) {
+              trParent.cells[8].innerText = (_parsedInvoiceRows[rowIdx].co2e || 0).toLocaleString('vi-VN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            }
+            if (trParent && trParent.cells[7]) {
+              trParent.cells[7].innerText = newUnit;
+            }
+          });
+        });
+      }
+
+      if (statMatched) statMatched.innerText = matchedCount;
+      if (statUnmatched) statUnmatched.innerText = unmatchedCount;
+      if (statUnmatchedBox) statUnmatchedBox.style.display = unmatchedCount > 0 ? 'inline-block' : 'none';
+      if (statEmission) statEmission.innerText = totalCo2e.toLocaleString('vi-VN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+      modal.style.display = 'flex';
+    }
+
+    function closeInvoiceImportPreviewModal() {
+      const modal = document.getElementById('modal-invoice-import-preview');
+      if (modal) modal.style.display = 'none';
+      const inputActInvoice = document.getElementById('input-act-invoice-file');
+      if (inputActInvoice) inputActInvoice.value = '';
+    }
+
+    function commitBatchInvoices() {
+      if (!_parsedInvoiceRows || _parsedInvoiceRows.length === 0) {
+        alert('Không có dữ liệu hóa đơn để nạp!');
+        return;
+      }
+
+      try {
+        const facSources = (window.InvoiceParser && window.InvoiceParser.FACILITY_ENERGY_SOURCES)
+          ? window.InvoiceParser.FACILITY_ENERGY_SOURCES
+          : [];
+
+        const username = localStorage.getItem('gs_current_user') || 'guest';
+        const rawUser = username.trim();
+        const userSlug = rawUser.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '') || 'guest';
+        const branchEl = document.getElementById('branch-selector');
+        const branchName = (branchEl && branchEl.value) ? branchEl.value : 'main';
+        const branchKey = branchName.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '') || 'main';
+        const slugSrcKey = `gs_data_${userSlug}_${branchKey}_sources`;
+
+        let currentSources = [];
+        try {
+          const s = localStorage.getItem(slugSrcKey) || localStorage.getItem(getBranchStorageKey('sources'));
+          if (s) currentSources = JSON.parse(s);
+        } catch(e) {}
+        if (!Array.isArray(currentSources)) currentSources = [];
+
+        let sourceAdded = false;
+        facSources.forEach(fSrc => {
+          if (!currentSources.some(x => x.id === fSrc.id)) {
+            currentSources.push({ ...fSrc });
+            sourceAdded = true;
+          }
+        });
+        if (sourceAdded) {
+          try {
+            localStorage.setItem(slugSrcKey, JSON.stringify(currentSources));
+            localStorage.setItem(getBranchStorageKey('sources'), JSON.stringify(currentSources));
+          } catch(e) {}
+        }
+
+        let managerName = 'Kế toán viên';
+        try {
+          const curUser = (localStorage.getItem('gs_current_user') || '').toLowerCase();
+          const users = JSON.parse(localStorage.getItem('gs_users') || '[]');
+          const u = users.find(x => x.username === curUser || x.email === curUser);
+          if (u && u.fullName) managerName = u.fullName;
+        } catch(e) {}
+
+        const nowStr = new Date().toISOString().slice(0, 10) + ' ' + new Date().toTimeString().slice(0, 5);
+
+        document.getElementById('no-activity-row')?.remove();
+
+        let addedCount = 0;
+        _parsedInvoiceRows.forEach(item => {
+          const docName = (item.invoiceNo ? item.invoiceNo : 'HĐ mua ngoài') +
+                          (item.seller ? ' - ' + item.seller : '') +
+                          (item.note ? ` (${item.note})` : '');
+
+          const finalCo2e = (item.co2e || 0).toFixed(2);
+          const finalFactor = item.factor || 0;
+
+          const dataObj = {
+            date: item.date,
+            sourceId: item.sourceId,
+            sourceType: item.sourceType || 'Đốt cháy cố định',
+            sourceName: item.sourceName,
+            amount: item.quantity,
+            unit: item.unit,
+            doc: docName,
+            manager: managerName,
+            co2e: finalCo2e,
+            efName: item.efName || item.sourceName,
+            refName: '',
+            finalFactor: finalFactor,
+            fileName: item.fileName || 'Bảng kê Excel',
+            docId: '',
+            fileUrl: '',
+            fileType: 'xlsx',
+            createdAt: nowStr,
+            isBiomass: 'false',
+            biogenicCo2: '0.00',
+            wwS: 0,
+            wwR: 0,
+            entryRole: 'accountant',
+            entryMode: 'direct',
+            timeStart: '',
+            timeEnd: '',
+            isInvoice: 'true',
+            isDowntime: 'false',
+            isOvertime: 'false',
+            recordType: 'normal',
+            downtimeHours: 0,
+            overtimeHours: 0,
+            hourlyRate: '',
+            stdHours: '16',
+            isBaseline: 'false'
+          };
+
+          renderRow(dataObj);
+          addedCount++;
+        });
+
+        saveActivityList();
+        closeInvoiceImportPreviewModal();
+
+        const toast = document.createElement('div');
+        toast.textContent = `Đã nạp thành công ${addedCount} hóa đơn vào Dữ liệu hoạt động!`;
+        toast.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#166534;color:#fff;padding:12px 24px;border-radius:8px;font-size:0.85rem;font-weight:600;z-index:99999;box-shadow:0 4px 16px rgba(0,0,0,0.2);';
+        document.body.appendChild(toast);
+        setTimeout(() => toast.remove(), 4000);
+
+        if (typeof applyFilter === 'function') {
+          applyFilter(actHiddenFilter?.value || '');
+        }
+      } catch (err) {
+        console.error('[Commit Batch Invoices] Lỗi:', err);
+        alert('Đã xảy ra lỗi khi nạp hóa đơn: ' + err.message);
+      }
+    }
+
+    // Gắn sự kiện cho các nút Hóa đơn Kế toán
+    const btnDownloadActInvoiceTemplate = document.getElementById('btn-download-act-invoice-template');
+    const inputActInvoiceFile = document.getElementById('input-act-invoice-file');
+    const btnImportActInvoices = document.getElementById('btn-import-act-invoices');
+
+    if (btnDownloadActInvoiceTemplate) {
+      btnDownloadActInvoiceTemplate.addEventListener('click', downloadAccountantInvoiceTemplate);
+    }
+    if (btnImportActInvoices && inputActInvoiceFile) {
+      btnImportActInvoices.addEventListener('click', () => {
+        inputActInvoiceFile.value = '';
+        inputActInvoiceFile.click();
+      });
+      inputActInvoiceFile.addEventListener('change', (e) => {
+        const file = e.target.files && e.target.files[0];
+        if (file) handleInvoiceExcelImport(file);
+      });
+    }
+
+    const btnCloseInvPreview = document.getElementById('btn-close-invoice-preview');
+    const btnCancelInvPreview = document.getElementById('btn-cancel-invoice-preview');
+    const btnCommitInvPreview = document.getElementById('btn-commit-invoice-preview');
+
+    if (btnCloseInvPreview) btnCloseInvPreview.addEventListener('click', closeInvoiceImportPreviewModal);
+    if (btnCancelInvPreview) btnCancelInvPreview.addEventListener('click', closeInvoiceImportPreviewModal);
+    if (btnCommitInvPreview) btnCommitInvPreview.addEventListener('click', commitBatchInvoices);
+
     window.toggleDayOffMenu = function(e) {
       if (e && typeof e.stopPropagation === 'function') e.stopPropagation();
       const menu = document.getElementById('day-off-dropdown-menu');
@@ -4485,6 +5017,12 @@
     window.syncSourceToBaselineActivities = syncSourceToBaselineActivities;
     window.openActivityModal = openModal;
     window.closeActivityModal = closeModal;
+    window.downloadAccountantInvoiceTemplate = downloadAccountantInvoiceTemplate;
+    window.handleInvoiceExcelImport = handleInvoiceExcelImport;
+    window.parseInvoiceSheetRows = parseInvoiceSheetRows;
+    window.openInvoiceImportPreviewModal = openInvoiceImportPreviewModal;
+    window.closeInvoiceImportPreviewModal = closeInvoiceImportPreviewModal;
+    window.commitBatchInvoices = commitBatchInvoices;
 
     loadActivityList();
     renderMachineOverview();

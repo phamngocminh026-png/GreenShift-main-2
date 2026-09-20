@@ -4602,12 +4602,29 @@
       if (!val) return new Date().toISOString().slice(0, 10);
       const s = String(val).trim();
       if (/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
-      const vnMatch = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/);
+      // YYYY/MM/DD or YYYY.MM.DD
+      const ymdMatch = s.match(/^(\d{4})[\/\.\-](\d{1,2})[\/\.\-](\d{1,2})$/);
+      if (ymdMatch) {
+        return `${ymdMatch[1]}-${ymdMatch[2].padStart(2, '0')}-${ymdMatch[3].padStart(2, '0')}`;
+      }
+      // DD/MM/YYYY or DD-MM-YYYY or DD.MM.YYYY
+      const vnMatch = s.match(/^(\d{1,2})[\/\.\-](\d{1,2})[\/\.\-](\d{4})/);
       if (vnMatch) {
         const d = vnMatch[1].padStart(2, '0');
         const m = vnMatch[2].padStart(2, '0');
         const y = vnMatch[3];
         return `${y}-${m}-${d}`;
+      }
+      // Month-Year format: MM/YYYY, Tháng M/YYYY, T3/2026
+      const myMatch = s.match(/(?:tháng\s*|t\s*)?(\d{1,2})[\/\-](\d{4})/i);
+      if (myMatch) {
+        const m = myMatch[1].padStart(2, '0');
+        const y = myMatch[2];
+        return `${y}-${m}-01`;
+      }
+      const ymMatch = s.match(/^(\d{4})[\/\-](\d{1,2})$/);
+      if (ymMatch) {
+        return `${ymMatch[1]}-${ymMatch[2].padStart(2, '0')}-01`;
       }
       const num = parseFloat(s);
       if (!isNaN(num) && num > 30000 && num < 60000) {
@@ -4616,6 +4633,12 @@
           return d.toISOString().slice(0, 10);
         } catch(e) {}
       }
+      try {
+        const parsed = new Date(s);
+        if (!isNaN(parsed.getTime())) {
+          return parsed.toISOString().slice(0, 10);
+        }
+      } catch(e) {}
       return new Date().toISOString().slice(0, 10);
     }
 
@@ -4681,15 +4704,23 @@
           amountVnd: parseNum(rawAmount),
           note: rawNote,
           co2e: co2e,
-          isMatched: isMatched
+          isMatched: isMatched,
+          attachedFile: null,
+          fileName: '',
+          docId: '',
+          fileUrl: '',
+          fileType: ''
         });
       });
 
       return parsed;
     }
 
+    let _currentInvoiceExcelFile = null;
+
     function handleInvoiceExcelImport(file) {
       if (!file) return;
+      _currentInvoiceExcelFile = file;
       const reader = new FileReader();
 
       reader.onload = function(evt) {
@@ -4739,6 +4770,52 @@
       }
     }
 
+    function renderInvoiceProofCell(row, idx) {
+      if (row && row.attachedFile) {
+        const fname = row.attachedFile.name || 'Hóa đơn';
+        return `<div style="display: inline-flex; align-items: center; justify-content: center; gap: 4px; background: #ecfdf5; border: 1px solid #a7f3d0; padding: 2px 6px; border-radius: 4px; max-width: 120px;" title="${fname}">
+          <span style="font-size: 0.72rem; color: #065f46; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">${fname}</span>
+          <button type="button" class="btn-remove-row-proof" data-index="${idx}" style="background: transparent; border: none; color: #dc2626; font-size: 0.85rem; font-weight: bold; cursor: pointer; padding: 0 2px; line-height: 1;" title="Gỡ bỏ tệp">&times;</button>
+        </div>`;
+      }
+      return `<label style="display: inline-flex; align-items: center; justify-content: center; gap: 4px; background: #f0f9ff; border: 1px solid #bae6fd; color: #0284c7; padding: 2px 8px; border-radius: 4px; font-size: 0.72rem; font-weight: 600; cursor: pointer; transition: all 0.15s;" title="Đính kèm ảnh hoặc PDF hóa đơn cho dòng này">
+        <input type="file" class="inv-row-proof-input" data-index="${idx}" accept=".pdf,.png,.jpg,.jpeg,.webp,.xml" style="display: none;">
+        <span>Tải tệp</span>
+      </label>`;
+    }
+
+    function bindProofCellEvents(cell, rowIdx) {
+      if (!cell) return;
+      const btnRemove = cell.querySelector('.btn-remove-row-proof');
+      if (btnRemove) {
+        btnRemove.addEventListener('click', function(e) {
+          e.stopPropagation();
+          if (_parsedInvoiceRows && _parsedInvoiceRows[rowIdx]) {
+            _parsedInvoiceRows[rowIdx].attachedFile = null;
+            _parsedInvoiceRows[rowIdx].fileName = '';
+            _parsedInvoiceRows[rowIdx].docId = '';
+            _parsedInvoiceRows[rowIdx].fileUrl = '';
+            _parsedInvoiceRows[rowIdx].fileType = '';
+            cell.innerHTML = renderInvoiceProofCell(_parsedInvoiceRows[rowIdx], rowIdx);
+            bindProofCellEvents(cell, rowIdx);
+          }
+        });
+      }
+      const inp = cell.querySelector('.inv-row-proof-input');
+      if (inp) {
+        inp.addEventListener('change', function(e) {
+          const file = e.target.files && e.target.files[0];
+          if (file && _parsedInvoiceRows && _parsedInvoiceRows[rowIdx]) {
+            _parsedInvoiceRows[rowIdx].attachedFile = file;
+            _parsedInvoiceRows[rowIdx].fileName = file.name;
+            _parsedInvoiceRows[rowIdx].fileType = file.type || '';
+            cell.innerHTML = renderInvoiceProofCell(_parsedInvoiceRows[rowIdx], rowIdx);
+            bindProofCellEvents(cell, rowIdx);
+          }
+        });
+      }
+    }
+
     function openInvoiceImportPreviewModal(parsedRows) {
       const modal = document.getElementById('modal-invoice-import-preview');
       if (!modal) return;
@@ -4750,6 +4827,8 @@
       const statUnmatched = document.getElementById('inv-stat-unmatched');
       const statUnmatchedBox = document.getElementById('inv-stat-unmatched-box');
       const statEmission = document.getElementById('inv-stat-total-emission');
+      const infoBatchEl = document.getElementById('inv-batch-attached-info');
+      if (infoBatchEl) infoBatchEl.style.display = 'none';
 
       if (statTotal) statTotal.innerText = _parsedInvoiceRows.length;
 
@@ -4798,9 +4877,17 @@
             <td style="padding: 8px 10px; text-align: right; font-weight: 600; color: #0f172a;">${(row.quantity || 0).toLocaleString('vi-VN')}</td>
             <td style="padding: 8px 10px; text-align: center; color: #64748b;">${row.unit || ''}</td>
             <td style="padding: 8px 10px; text-align: right; font-weight: 600; color: #15803d;">${(row.co2e || 0).toLocaleString('vi-VN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+            <td style="padding: 8px 10px; text-align: center;" class="inv-proof-cell" data-index="${idx}">
+              ${renderInvoiceProofCell(row, idx)}
+            </td>
           `;
 
           tbody.appendChild(tr);
+        });
+
+        tbody.querySelectorAll('.inv-proof-cell').forEach(cell => {
+          const rIdx = parseInt(cell.dataset.index, 10);
+          bindProofCellEvents(cell, rIdx);
         });
 
         tbody.querySelectorAll('.inv-preview-src-select').forEach(sel => {
@@ -4838,6 +4925,71 @@
         });
       }
 
+      // Xử lý tải lên chứng từ hàng loạt (Batch Proof Upload)
+      const inputBatchProofs = document.getElementById('inv-batch-proof-files');
+      if (inputBatchProofs) {
+        inputBatchProofs.onchange = function(e) {
+          const files = Array.from(e.target.files || []);
+          if (files.length === 0) return;
+          let matchedCount = 0;
+
+          files.forEach(file => {
+            const fNorm = file.name.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]/g, '');
+            let targetRow = null;
+
+            // 1. Khớp theo Số HĐ
+            for (const r of _parsedInvoiceRows) {
+              const invNoNorm = (r.invoiceNo || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]/g, '');
+              if (invNoNorm && invNoNorm.length >= 3 && (fNorm.includes(invNoNorm) || invNoNorm.includes(fNorm))) {
+                targetRow = r;
+                break;
+              }
+            }
+
+            // 2. Khớp theo Đơn vị bán hoặc Mặt hàng nếu chưa gắn
+            if (!targetRow) {
+              for (const r of _parsedInvoiceRows) {
+                if (r.attachedFile) continue;
+                const sellerNorm = (r.seller || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]/g, '');
+                const itemNorm = (r.rawItem || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]/g, '');
+                if (sellerNorm && sellerNorm.length >= 3 && fNorm.includes(sellerNorm)) {
+                  targetRow = r;
+                  break;
+                }
+                if (itemNorm && itemNorm.length >= 3 && fNorm.includes(itemNorm)) {
+                  targetRow = r;
+                  break;
+                }
+              }
+            }
+
+            // 3. Nếu chỉ có 1 tệp duy nhất và 1 dòng duy nhất
+            if (!targetRow && files.length === 1 && _parsedInvoiceRows.length === 1) {
+              targetRow = _parsedInvoiceRows[0];
+            }
+
+            if (targetRow) {
+              targetRow.attachedFile = file;
+              targetRow.fileName = file.name;
+              targetRow.fileType = file.type || '';
+              matchedCount++;
+              const cell = tbody.querySelector(`.inv-proof-cell[data-index="${targetRow.index}"]`);
+              if (cell) {
+                cell.innerHTML = renderInvoiceProofCell(targetRow, targetRow.index);
+                bindProofCellEvents(cell, targetRow.index);
+              }
+            }
+          });
+
+          const infoEl = document.getElementById('inv-batch-attached-info');
+          if (infoEl) {
+            infoEl.innerText = `Đã đính kèm ${matchedCount}/${files.length} tệp chứng từ`;
+            infoEl.style.display = 'inline-block';
+          }
+          e.target.value = '';
+        };
+      }
+
       if (statMatched) statMatched.innerText = matchedCount;
       if (statUnmatched) statUnmatched.innerText = unmatchedCount;
       if (statUnmatchedBox) statUnmatchedBox.style.display = unmatchedCount > 0 ? 'inline-block' : 'none';
@@ -4853,13 +5005,50 @@
       if (inputActInvoice) inputActInvoice.value = '';
     }
 
-    function commitBatchInvoices() {
+    async function commitBatchInvoices() {
       if (!_parsedInvoiceRows || _parsedInvoiceRows.length === 0) {
         alert('Không có dữ liệu hóa đơn để nạp!');
         return;
       }
 
+      const btnCommit = document.getElementById('btn-commit-invoice-preview');
+      const origBtnHtml = btnCommit ? btnCommit.innerHTML : '';
+      if (btnCommit) {
+        btnCommit.disabled = true;
+        btnCommit.innerHTML = '<span>Đang lưu trữ chứng từ...</span>';
+      }
+
       try {
+        // Lưu trữ bảng kê Excel làm hồ sơ chứng từ gốc dự phòng
+        let excelDocRecord = null;
+        if (_currentInvoiceExcelFile && window.DocumentStorage && typeof window.DocumentStorage.saveDocument === 'function') {
+          try {
+            excelDocRecord = await window.DocumentStorage.saveDocument(_currentInvoiceExcelFile);
+          } catch (e) {
+            console.warn('[Commit Invoices] Không thể lưu file Excel vào DocumentStorage:', e);
+          }
+        }
+
+        // Lưu trữ từng tệp chứng từ vật lý (ảnh / scan / PDF) đã được đính kèm vào kho
+        for (const item of _parsedInvoiceRows) {
+          if (item.attachedFile && window.DocumentStorage && typeof window.DocumentStorage.saveDocument === 'function') {
+            try {
+              const docRecord = await window.DocumentStorage.saveDocument(item.attachedFile);
+              item.docId = docRecord.docId;
+              item.fileName = docRecord.fileName;
+              item.fileUrl = docRecord.fileUrl || docRecord.dataUrl || '';
+              item.fileType = docRecord.fileType;
+            } catch (err) {
+              console.warn('[Commit Invoices] Lỗi lưu tệp chứng từ cho dòng:', item.invoiceNo, err);
+            }
+          } else if (excelDocRecord && !item.docId) {
+            item.docId = excelDocRecord.docId;
+            item.fileName = excelDocRecord.fileName;
+            item.fileUrl = excelDocRecord.fileUrl || excelDocRecord.dataUrl || '';
+            item.fileType = 'xlsx';
+          }
+        }
+
         const facSources = (window.InvoiceParser && window.InvoiceParser.FACILITY_ENERGY_SOURCES)
           ? window.InvoiceParser.FACILITY_ENERGY_SOURCES
           : [];
@@ -4928,9 +5117,9 @@
             refName: '',
             finalFactor: finalFactor,
             fileName: item.fileName || 'Bảng kê Excel',
-            docId: '',
-            fileUrl: '',
-            fileType: 'xlsx',
+            docId: item.docId || '',
+            fileUrl: item.fileUrl || '',
+            fileType: item.fileType || 'xlsx',
             createdAt: nowStr,
             isBiomass: 'false',
             biogenicCo2: '0.00',
@@ -4970,6 +5159,11 @@
       } catch (err) {
         console.error('[Commit Batch Invoices] Lỗi:', err);
         alert('Đã xảy ra lỗi khi nạp hóa đơn: ' + err.message);
+      } finally {
+        if (btnCommit) {
+          btnCommit.disabled = false;
+          btnCommit.innerHTML = origBtnHtml;
+        }
       }
     }
 

@@ -1712,10 +1712,14 @@
 
           <!-- 1. SECTION ĐỘNG CƠ / MÁY MÓC / ĐỐT NHIÊN LIỆU (TIÊU THỤ ĐIỆN, ĐỐT CHÁY CỐ ĐỊNH, ĐỘNG CƠ) -->
           <div id="source-machine-eval-section">
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.6rem; margin-bottom: 0.5rem;">
+            <div style="display: grid; grid-template-columns: 1.2fr 0.8fr 1fr; gap: 0.6rem; margin-bottom: 0.5rem;">
               <div>
-                <label style="font-size: 0.75rem; font-weight: 600; color: #475569;">Công suất định mức của máy</label>
-                <input type="number" id="source-op-capacity" class="form-control" placeholder="Ví dụ: 45" step="any" min="0" style="height: 32px; font-size: 0.85rem;">
+                <label style="font-size: 0.75rem; font-weight: 600; color: #475569;">Công suất 1 máy</label>
+                <input type="number" id="source-op-capacity" class="form-control" placeholder="Ví dụ: 350" step="any" min="0" style="height: 32px; font-size: 0.85rem;">
+              </div>
+              <div>
+                <label style="font-size: 0.75rem; font-weight: 600; color: #475569;" title="Nếu là cụm nhiều máy (VD: 6 xe tải, 30 máy dệt), nhập số lượng để hệ thống tự nhân tổng công suất">Số lượng máy</label>
+                <input type="number" id="source-op-quantity" class="form-control" value="1" min="1" step="1" placeholder="1" style="height: 32px; font-size: 0.85rem;">
               </div>
               <div>
                 <label style="font-size: 0.75rem; font-weight: 600; color: #475569;">Đơn vị công suất</label>
@@ -1738,6 +1742,10 @@
             </div>
             <!-- Bảng tóm tắt kết quả tính toán tự động máy móc -->
             <div style="background: #ffffff; border: 1px solid #e2e8f0; border-radius: 4px; padding: 0.5rem 0.75rem; font-size: 0.76rem; color: #334155; line-height: 1.5;">
+              <div id="source-cluster-cap-row" style="display: flex; justify-content: space-between; border-bottom: 1px dashed #e2e8f0; padding-bottom: 3px; margin-bottom: 3px;">
+                <span>Tổng công suất cụm (<span id="source-calc-qty-label">1</span> máy):</span>
+                <strong id="source-calc-total-cap" style="color: #0f172a;">-</strong>
+              </div>
               <div style="display: flex; justify-content: space-between;">
                 <span>Tiêu thụ mỗi giờ (Q_hour):</span>
                 <strong id="source-calc-hourly" style="color: var(--color-primary);">-</strong>
@@ -5011,12 +5019,20 @@
     function recalcSourceSelfEval() {
       if (!sourceOpCapacity || !sourceCalcHourly) return;
       const cap = parseFloat(sourceOpCapacity.value) || 0;
+      const qtyInput = document.getElementById('source-op-quantity');
+      const qty = parseInt(qtyInput ? qtyInput.value : 1, 10) || 1;
+      const totalCap = Math.round(cap * qty * 1000) / 1000;
       const unit = (sourceOpCapUnit && sourceOpCapUnit.value) ? sourceOpCapUnit.value : 'đơn vị';
       const load = (parseFloat(sourceOpLoad ? sourceOpLoad.value : 80) || 80) / 100;
       const h = parseFloat(sourceOpHoursDay ? sourceOpHoursDay.value : 16) || 16;
       const d = parseFloat(sourceOpDaysWeek ? sourceOpDaysWeek.value : 6) || 6;
 
-      const hourly = Math.round(cap * load * 1000) / 1000;
+      const qtyLabel = document.getElementById('source-calc-qty-label');
+      const totalCapEl = document.getElementById('source-calc-total-cap');
+      if (qtyLabel) qtyLabel.innerText = qty;
+      if (totalCapEl) totalCapEl.innerText = `${totalCap.toLocaleString('vi-VN')} ${unit}`;
+
+      const hourly = Math.round(totalCap * load * 1000) / 1000;
       const daily = Math.round(hourly * h * 1000) / 1000;
       const annual = Math.round(daily * d * 52 * 1000) / 1000;
 
@@ -5039,12 +5055,23 @@
         if (sourceOpCapacity && (!sourceOpCapacity.value || sourceOpCapacity.value === '0')) sourceOpCapacity.value = matched.ratedCapacity;
         if (sourceOpCapUnit && !sourceOpCapUnit.value) sourceOpCapUnit.value = matched.capacityUnit;
         if (sourceOpLoad && (!sourceOpLoad.value || sourceOpLoad.value === '100')) sourceOpLoad.value = Math.round(matched.defaultLoadFactor * 100);
+
+        const qtyMatch = eqName.match(/(?:cụm|tổ hợp|dàn|hệ thống|\b)\s*0*(\d{1,3})\s*(?:xe|máy|thiết bị|đầu|chiếc|bộ)/i);
+        const sourceOpQuantity = document.getElementById('source-op-quantity');
+        if (qtyMatch && sourceOpQuantity) {
+          sourceOpQuantity.value = parseInt(qtyMatch[1], 10) || 1;
+        } else if (sourceOpQuantity && (!sourceOpQuantity.value || sourceOpQuantity.value === '0')) {
+          sourceOpQuantity.value = '1';
+        }
+
         recalcSourceSelfEval();
       }
     }
 
+    const sourceOpQuantity = document.getElementById('source-op-quantity');
     if (sourceMeasureSelect) sourceMeasureSelect.addEventListener('change', updateSourceMeasureUI);
     if (sourceOpCapacity) sourceOpCapacity.addEventListener('input', recalcSourceSelfEval);
+    if (sourceOpQuantity) sourceOpQuantity.addEventListener('input', recalcSourceSelfEval);
     if (sourceOpCapUnit) sourceOpCapUnit.addEventListener('input', recalcSourceSelfEval);
     if (sourceOpLoad) sourceOpLoad.addEventListener('input', recalcSourceSelfEval);
     if (sourceOpHoursDay) sourceOpHoursDay.addEventListener('input', recalcSourceSelfEval);
@@ -5239,6 +5266,7 @@
             }
 
             if (document.getElementById('source-op-capacity')) document.getElementById('source-op-capacity').value = row.dataset.opCapacity || '';
+            if (document.getElementById('source-op-quantity')) document.getElementById('source-op-quantity').value = row.dataset.opQuantity || '1';
             if (document.getElementById('source-op-cap-unit')) document.getElementById('source-op-cap-unit').value = row.dataset.opCapUnit || '';
             if (document.getElementById('source-op-load')) document.getElementById('source-op-load').value = row.dataset.opLoad || '80';
             if (document.getElementById('source-op-hours-day')) document.getElementById('source-op-hours-day').value = row.dataset.opHoursDay || '16';
@@ -5406,6 +5434,7 @@
       document.getElementById('no-source-row')?.remove();
 
       const opCapacity = document.getElementById('source-op-capacity') ? document.getElementById('source-op-capacity').value : '';
+      const opQuantity = document.getElementById('source-op-quantity') ? (parseInt(document.getElementById('source-op-quantity').value, 10) || 1) : 1;
       const opCapUnit = document.getElementById('source-op-cap-unit') ? document.getElementById('source-op-cap-unit').value : '';
       const opLoad = document.getElementById('source-op-load') ? document.getElementById('source-op-load').value : '80';
       const opHoursDay = document.getElementById('source-op-hours-day') ? document.getElementById('source-op-hours-day').value : '16';
@@ -5429,8 +5458,9 @@
         const efInT = (efNum > 5) ? (efNum / 1000) : efNum;
         annualEstEmissions = Math.round(annualEstQty * efInT * 100) / 100;
       } else if (measure === 'Tự đánh giá' && opCapacity) {
-        hourlyRate = window.calcEquipmentHourlyRate ? window.calcEquipmentHourlyRate(opCapacity, opLoad) : Math.round(parseFloat(opCapacity) * (parseFloat(opLoad) / 100) * 1000) / 1000;
-        const ann = window.calcEquipmentAnnual ? window.calcEquipmentAnnual(opCapacity, opLoad, opHoursDay, opDaysWeek) : { annual: Math.round(hourlyRate * parseFloat(opHoursDay) * parseFloat(opDaysWeek) * 52 * 1000) / 1000 };
+        const totalOpCap = (parseFloat(opCapacity) || 0) * opQuantity;
+        hourlyRate = window.calcEquipmentHourlyRate ? window.calcEquipmentHourlyRate(totalOpCap, opLoad) : Math.round(totalOpCap * (parseFloat(opLoad) / 100) * 1000) / 1000;
+        const ann = window.calcEquipmentAnnual ? window.calcEquipmentAnnual(totalOpCap, opLoad, opHoursDay, opDaysWeek) : { annual: Math.round(hourlyRate * parseFloat(opHoursDay) * parseFloat(opDaysWeek) * 52 * 1000) / 1000 };
         annualEstQty = ann.annual;
         const efNum = parseFloat(customFactor) || 0.6766;
         annualEstEmissions = Math.round((annualEstQty * efNum / 1000) * 100) / 100;
@@ -5454,6 +5484,7 @@
         currentEditingSourceRow.dataset.createdAt   = createdAt;
 
         currentEditingSourceRow.dataset.opCapacity = opCapacity;
+        currentEditingSourceRow.dataset.opQuantity = opQuantity.toString();
         currentEditingSourceRow.dataset.opCapUnit   = opCapUnit;
         currentEditingSourceRow.dataset.opLoad      = opLoad;
         currentEditingSourceRow.dataset.opHoursDay  = opHoursDay;
@@ -5516,6 +5547,7 @@
         tr.dataset.createdAt   = now;
 
         tr.dataset.opCapacity = opCapacity;
+        tr.dataset.opQuantity = opQuantity.toString();
         tr.dataset.opCapUnit   = opCapUnit;
         tr.dataset.opLoad      = opLoad;
         tr.dataset.opHoursDay  = opHoursDay;
@@ -7358,6 +7390,16 @@
           <div style="color: #334155;">Tổng số hóa đơn: <strong id="inv-stat-total" style="color: #0f172a; font-size: 0.95rem;">0</strong> dòng</div>
           <div style="color: #166534; background: #dcfce7; padding: 2px 8px; border-radius: 12px; border: 1px solid #bbf7d0;">Tự động khớp nguồn: <strong id="inv-stat-matched">0</strong></div>
           <div id="inv-stat-unmatched-box" style="display: none; color: #b45309; background: #fef3c7; padding: 2px 8px; border-radius: 12px; border: 1px solid #fde68a;">Cần chọn nguồn: <strong id="inv-stat-unmatched">0</strong></div>
+
+          <!-- Batch proof attachment button -->
+          <div style="display: inline-flex; align-items: center; margin-left: 6px;">
+            <label id="btn-batch-upload-proofs" style="background: #ffffff; color: #0284c7; border: 1px dashed #0284c7; padding: 3px 10px; border-radius: 6px; font-size: 0.78rem; font-weight: 600; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; transition: all 0.15s;" title="Tải lên một hoặc nhiều tệp ảnh, PDF, scan hoặc hóa đơn điện tử để hệ thống tự động gán vào hóa đơn tương ứng">
+              <input type="file" id="inv-batch-proof-files" multiple accept=".pdf,.png,.jpg,.jpeg,.webp,.xml,.xlsx" style="display: none;">
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path></svg>
+              <span>Đính kèm tệp chứng từ (Ảnh / PDF / Scan)</span>
+            </label>
+            <span id="inv-batch-attached-info" style="margin-left: 8px; font-size: 0.75rem; color: #166534; font-weight: 600; display: none;"></span>
+          </div>
         </div>
         <div style="font-weight: 600; color: #15803d; font-size: 0.9rem;">
           Tổng phát thải dự kiến: <span id="inv-stat-total-emission" style="font-weight: 700; font-size: 1.05rem;">0.00</span> kgCO2e
@@ -7371,13 +7413,14 @@
             <tr style="position: sticky; top: 0; background: #f8fafc; z-index: 2; border-bottom: 2px solid #cbd5e1; text-align: left;">
               <th style="padding: 8px 10px; width: 35px; text-align: center;">STT</th>
               <th style="padding: 8px 10px; width: 95px;">Ngày HĐ</th>
-              <th style="padding: 8px 10px; width: 130px;">Số HĐ / Chứng từ</th>
-              <th style="padding: 8px 10px; width: 140px;">Đơn vị bán</th>
-              <th style="padding: 8px 10px; width: 160px;">Mặt hàng gốc</th>
-              <th style="padding: 8px 10px; min-width: 220px;">Nguồn năng lượng cấp Cơ sở</th>
-              <th style="padding: 8px 10px; width: 95px; text-align: right;">Lượng dùng</th>
-              <th style="padding: 8px 10px; width: 55px; text-align: center;">ĐVT</th>
-              <th style="padding: 8px 10px; width: 110px; text-align: right;">Phát thải (kgCO2e)</th>
+              <th style="padding: 8px 10px; width: 125px;">Số HĐ / Chứng từ</th>
+              <th style="padding: 8px 10px; width: 130px;">Đơn vị bán</th>
+              <th style="padding: 8px 10px; width: 150px;">Mặt hàng gốc</th>
+              <th style="padding: 8px 10px; min-width: 200px;">Nguồn năng lượng cấp Cơ sở</th>
+              <th style="padding: 8px 10px; width: 90px; text-align: right;">Lượng dùng</th>
+              <th style="padding: 8px 10px; width: 50px; text-align: center;">ĐVT</th>
+              <th style="padding: 8px 10px; width: 105px; text-align: right;">Phát thải (kgCO2e)</th>
+              <th style="padding: 8px 10px; width: 125px; text-align: center;">Chứng từ gốc</th>
             </tr>
           </thead>
           <tbody id="invoice-preview-tbody">
@@ -7447,9 +7490,11 @@
       if (btnCommitEl) btnCommitEl.style.display = 'inline-flex';
 
       // Lấy tất cả thiết bị chuẩn sẵn có
-      const allStandards = (typeof window.getAllEquipments === 'function') 
-        ? window.getAllEquipments() 
-        : (window.EQUIPMENT_MASTER || []);
+      const allStandards = (typeof window.getAllStandardCatalogEquipments === 'function')
+        ? window.getAllStandardCatalogEquipments()
+        : ((typeof window.getAllEquipments === 'function') 
+            ? window.getAllEquipments() 
+            : (window.EQUIPMENT_MASTER || []));
 
       renderSmartMappingTable(_smartMappingItems, allStandards);
 
@@ -7777,7 +7822,7 @@
       currentEqs.forEach(eq => {
         const rawName = eq.name || eq.type || '';
         const matchResult = (typeof window.findStandardEquipmentSmart === 'function')
-          ? window.findStandardEquipmentSmart(rawName, eq.category)
+          ? window.findStandardEquipmentSmart(eq || rawName, eq.category)
           : null;
         const conf = matchResult ? matchResult.confidence : 0;
         if (conf < 0.85) {
@@ -7824,7 +7869,7 @@
         const analyzed = currentEqs.map((eq, idx) => {
           const rawName = eq.name || eq.type || '';
           const matchResult = (typeof window.findStandardEquipmentSmart === 'function')
-            ? window.findStandardEquipmentSmart(rawName, eq.category)
+            ? window.findStandardEquipmentSmart(eq || rawName, eq.category)
             : null;
           return {
             rowIndex: idx,

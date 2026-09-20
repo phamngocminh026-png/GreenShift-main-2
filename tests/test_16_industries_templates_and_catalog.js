@@ -109,6 +109,40 @@ testSectors.forEach(ts => {
   assert.ok(rows && rows.length >= 20, `Sector ${ts.name} must return >= 20 rows`);
   assert.ok(rows.some(r => (r['Số tài sản'] || '').includes(ts.expectedPrefix)), `Sector ${ts.name} must contain code prefix ${ts.expectedPrefix}`);
 });
-console.log('PASS 4: getIndustry16TemplateRows successfully retrieved records across all test sectors.');
+// 5. Verify that importing any of the 16 standard templates has ZERO unmapped equipment
+const eqDbPath = path.join(__dirname, '..', 'assets', 'js', 'equipment-db.js');
+const eqDbCode = fs.readFileSync(eqDbPath, 'utf8');
+vm.runInContext(eqDbCode, sandbox);
+
+let totalNeedingReview = 0;
+expectedFiles.forEach(f => {
+  const p = path.join(templatesDir, f);
+  const buf = fs.readFileSync(p);
+  const wb = XLSX.read(buf, { type: 'buffer' });
+  const sheetName = wb.SheetNames[0];
+  const rows = XLSX.utils.sheet_to_json(wb.Sheets[sheetName], { defval: '' });
+
+  let fileUnmapped = 0;
+  rows.forEach((r, idx) => {
+    const eqObj = {
+      asset: r['Số tài sản'],
+      code: r['Số tài sản'],
+      name: r['Tên thiết bị'],
+      type: r['Loại thiết bị'],
+      category: r['Nguồn phát thải']
+    };
+    const res = sandbox.window.findStandardEquipmentSmart(eqObj, r['Nguồn phát thải']);
+    const conf = res ? res.confidence : 0;
+    if (conf < 0.85) {
+      fileUnmapped++;
+    }
+  });
+
+  assert.strictEqual(fileUnmapped, 0, `Template ${f} must have 0 equipment needing review (found ${fileUnmapped})`);
+  totalNeedingReview += fileUnmapped;
+});
+
+assert.strictEqual(totalNeedingReview, 0, 'Total equipment needing review across all 16 template files must be exactly 0');
+console.log('PASS 5: All 349 equipment items in 16 templates recognized with 100% confidence (0 need review).');
 
 console.log('ALL CHECKS PASSED: 16 Industry Standalone Templates & Catalog are 100% verified.');

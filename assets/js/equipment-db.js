@@ -2304,27 +2304,37 @@ window.findStandardEquipmentSmart = function(input) {
   let codeQuery = '';
   if (typeof input === 'string') {
     searchStr = input;
-  } else if (typeof input === 'object') {
+    const trimmedInput = input.trim();
+    if (/^[A-Z0-9]+-[A-Z0-9_-]+$/i.test(trimmedInput)) {
+      codeQuery = trimmedInput;
+    }
+  } else if (typeof input === 'object' && input !== null) {
     codeQuery = (input.code || input.asset || '').toString().trim();
     searchStr = [input.name, input.type, input.brand, input.category].filter(Boolean).join(' ');
   }
 
   const cleanSearchStr = String(searchStr).trim();
   const normQuery = window.removeVietnameseTones(cleanSearchStr);
-  const allEquipments = (typeof window.getAllEquipments === 'function') 
-    ? window.getAllEquipments() 
-    : (window.EQUIPMENT_MASTER || []);
+  const allEquipments = (typeof window.getAllStandardCatalogEquipments === 'function')
+    ? window.getAllStandardCatalogEquipments()
+    : ((typeof window.getAllEquipments === 'function') 
+        ? window.getAllEquipments() 
+        : (window.EQUIPMENT_MASTER || []));
 
   // 1. Kiểm tra khớp mã thiết bị chuẩn (Exact Code Match)
   if (codeQuery) {
-    const codeMatch = allEquipments.find(eq => eq.code.toLowerCase() === codeQuery.toLowerCase());
+    const codeMatch = allEquipments.find(eq => eq.code && eq.code.toLowerCase() === codeQuery.toLowerCase());
     if (codeMatch) {
       return { matched: codeMatch, equipment: codeMatch, score: 1.0, confidence: 1.0, matchType: 'EXACT_CODE', matchReason: 'exact_code', confidenceLabel: 'Tuyệt đối (100%)' };
     }
   }
 
-  // 2. Kiểm tra khớp tên tuyệt đối
-  const exactMatch = allEquipments.find(eq => window.removeVietnameseTones(eq.name) === normQuery);
+  // 2. Kiểm tra khớp tên hoặc loại thiết bị tuyệt đối
+  const exactMatch = allEquipments.find(eq => {
+    const n = window.removeVietnameseTones(eq.name || '');
+    const t = eq.type ? window.removeVietnameseTones(eq.type) : '';
+    return n === normQuery || (t && t === normQuery);
+  });
   if (exactMatch) {
     return { matched: exactMatch, equipment: exactMatch, score: 1.0, confidence: 1.0, matchType: 'EXACT_NAME', matchReason: 'exact_name', confidenceLabel: 'Tuyệt đối (100%)' };
   }
@@ -2335,12 +2345,13 @@ window.findStandardEquipmentSmart = function(input) {
   for (const eq of allEquipments) {
     let score = 0;
     let matchType = 'NONE';
-    const normEqName = window.removeVietnameseTones(eq.name);
+    const normEqName = window.removeVietnameseTones(eq.name || '');
+    const normEqType = eq.type ? window.removeVietnameseTones(eq.type) : '';
     const aliases = (window.EQUIPMENT_ALIASES && window.EQUIPMENT_ALIASES[eq.code]) || [];
 
-    // So khớp chuỗi con
-    if (normQuery.includes(normEqName) || normEqName.includes(normQuery)) {
-      score = Math.max(score, 0.86);
+    // So khớp chuỗi con theo tên hoặc loại
+    if (normQuery.includes(normEqName) || normEqName.includes(normQuery) || (normEqType && (normQuery.includes(normEqType) || normEqType.includes(normQuery)))) {
+      score = Math.max(score, 0.92);
       matchType = 'SUBSTRING';
     }
 

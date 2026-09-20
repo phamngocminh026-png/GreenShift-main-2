@@ -235,8 +235,9 @@
       const fnLower = fileName.toLowerCase();
       const isPdf = fnLower.endsWith('.pdf') || fileType.includes('pdf');
       const isImg = fnLower.endsWith('.png') || fnLower.endsWith('.jpg') || fnLower.endsWith('.jpeg') || fnLower.endsWith('.webp') || fileType.includes('image');
-      const isXml = fnLower.endsWith('.xml') || fileType.includes('xml');
-      const isTxt = fnLower.endsWith('.txt') || fileType.includes('text');
+      const isXlsx = fnLower.endsWith('.xlsx') || fnLower.endsWith('.xls') || fnLower.endsWith('.csv') || fileType.includes('spreadsheet') || fileType.includes('excel') || fileType.includes('sheet');
+      const isXml = (fnLower.endsWith('.xml') || fileType.includes('text/xml') || fileType.includes('application/xml')) && !isXlsx;
+      const isTxt = (fnLower.endsWith('.txt') || fileType.includes('text/plain')) && !isXlsx && !isXml;
 
       if (titleEl) titleEl.innerText = `Chứng từ gốc: ${fileName}`;
       if (subEl) {
@@ -268,7 +269,34 @@
         `;
         if (infoEl) infoEl.innerText = 'Định dạng: Hóa đơn điện tử PDF';
       }
-      // Trường hợp 3: File XML hóa đơn (Thông tư 78) hoặc File text
+      // Trường hợp 3: Bảng tính Excel (.xlsx, .xls, .csv)
+      else if (isXlsx && (dataUrl || fileUrl)) {
+        const src = dataUrl || fileUrl;
+        activeDownloadUrl = src;
+        bodyEl.innerHTML = `
+          <div style="padding: 2.5rem 1.5rem; background: #ffffff; border: 1px solid #cbd5e1; border-radius: 8px; max-width: 520px; width: 100%; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); text-align: center;">
+            <div style="width: 56px; height: 56px; margin: 0 auto 1rem; border-radius: 50%; background: #ecfdf5; color: #047857; display: flex; align-items: center; justify-content: center;">
+              <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="8" y1="13" x2="16" y2="13"></line><line x1="8" y1="17" x2="16" y2="17"></line><line x1="10" y1="9" x2="10" y2="9"></line></svg>
+            </div>
+            <h3 style="margin: 0 0 0.5rem; color: #0f172a; font-size: 1.1rem; font-weight: 700;">Bảng tính Hóa đơn / Dữ liệu Excel</h3>
+            <div style="font-size: 0.85rem; color: #047857; font-weight: 600; margin-bottom: 0.8rem;">Tên tệp: ${fileName}</div>
+            <p style="font-size: 0.82rem; color: #64748b; line-height: 1.6; margin-bottom: 1.2rem; text-align: justify;">
+              Chứng từ đính kèm là tệp bảng tính định dạng Microsoft Excel (.xlsx / .csv). Tệp chứa cấu trúc dữ liệu nhiều cột/dòng đã được đối soát vào cơ sở dữ liệu kiểm kê khí nhà kính GreenShift.
+            </p>
+            <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 0.75rem; font-size: 0.75rem; color: #475569; text-align: left; margin-bottom: 1.2rem;">
+              <div>• <strong>Định dạng tệp:</strong> Bảng tính Microsoft Excel OpenXML (.xlsx)</div>
+              <div>• <strong>Tình trạng:</strong> Đã mã hóa và lưu trữ an toàn trong Vault</div>
+              <div>• <strong>Thao tác:</strong> Bấm nút bên dưới để tải tệp về mở bằng Excel</div>
+            </div>
+            <a href="${src}" download="${fileName}" style="display: inline-flex; align-items: center; gap: 6px; padding: 0.6rem 1.4rem; background: #047857; color: #ffffff; border-radius: 6px; font-weight: 600; text-decoration: none; font-size: 0.85rem;">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
+              Tải xuống bảng tính Excel
+            </a>
+          </div>
+        `;
+        if (infoEl) infoEl.innerText = 'Định dạng: Bảng tính Microsoft Excel (.xlsx)';
+      }
+      // Trường hợp 4: File XML hóa đơn (Thông tư 78) hoặc File text
       else if ((isXml || isTxt) && (textContent || dataUrl)) {
         let contentToShow = textContent;
         if (!contentToShow && dataUrl.startsWith('data:')) {
@@ -292,7 +320,26 @@
         `;
         if (infoEl) infoEl.innerText = 'Định dạng: Hóa đơn điện tử XML chuẩn Thông tư 78';
       }
-      // Trường hợp 4: Tệp mô phỏng / Chứng từ đã đối soát
+      // Trường hợp 5: Chưa đính kèm tệp chứng từ gốc
+      else if ((!params.fileName || params.fileName === 'Chung_tu_phat_thai' || !params.fileName.trim()) && !dataUrl && !fileUrl && !textContent) {
+        bodyEl.innerHTML = `
+          <div style="padding: 2.5rem 1.5rem; background: #ffffff; border: 1px solid #e2e8f0; border-radius: 8px; max-width: 520px; width: 100%; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); text-align: center;">
+            <div style="width: 52px; height: 52px; margin: 0 auto 1rem; border-radius: 50%; background: #fef3c7; color: #d97706; display: flex; align-items: center; justify-content: center;">
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="12" y1="8" x2="12" y2="12"></line><line x1="12" y1="16" x2="12.01" y2="16"></line></svg>
+            </div>
+            <h3 style="margin: 0 0 0.5rem; color: #0f172a; font-size: 1.05rem; font-weight: 700;">Chưa đính kèm tệp chứng từ gốc</h3>
+            <p style="font-size: 0.82rem; color: #64748b; line-height: 1.6; margin-bottom: 1.2rem; text-align: justify;">
+              Bản ghi này hiện chưa có tệp chứng từ gốc (ảnh chụp hóa đơn, phiếu cân, hoặc file PDF). Vui lòng đính kèm chứng từ khi cần thẩm định kiểm kê khí nhà kính hoặc phục vụ kiểm toán độc lập theo ISO 14064-3.
+            </p>
+            <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 0.75rem; font-size: 0.75rem; color: #475569; text-align: left;">
+              <div>• <strong>Hướng dẫn:</strong> Bấm nút <strong>Sửa bản ghi</strong> trong bảng Hoạt động để tải lên file PDF, hóa đơn điện tử XML hoặc ảnh chụp chứng từ.</div>
+            </div>
+          </div>
+        `;
+        if (infoEl) infoEl.innerText = 'Trạng thái: Chưa có tệp chứng từ kèm theo';
+        activeDownloadUrl = '';
+      }
+      // Trường hợp 6: Tệp mô phỏng / Chứng từ đã đối soát
       else {
         const certHtml = `
           <div style="padding: 2.5rem 1.5rem; background: #ffffff; border: 1px solid #cbd5e1; border-radius: 8px; max-width: 520px; width: 100%; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.05); text-align: center;">

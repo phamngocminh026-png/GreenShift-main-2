@@ -2772,6 +2772,117 @@
       } catch (syncErr) {
         console.warn('[GreenShift DB Sync] Ignored background sync exception:', syncErr);
       }
+
+      // Auto-sync equipment items to emission sources (sources)
+      try {
+        const srcKey = getBranchStorageKey('sources');
+        let sourceList = JSON.parse(localStorage.getItem(srcKey) || '[]');
+        let srcModified = false;
+        
+        eqData.forEach(eq => {
+          const matchIdx = sourceList.findIndex(s => (eq.asset && s.eqAsset === eq.asset) || (eq.name && s.eq === eq.name));
+          const std = (typeof window.findStandardEquipment === 'function') ? window.findStandardEquipment(eq.type) : null;
+          const isElec = eq.type.toLowerCase().includes('điện') || eq.type.toLowerCase().includes('chiller') || (eq.category && eq.category.toLowerCase().includes('điện'));
+          const isFugitive = (eq.category && (eq.category.includes('rò rỉ') || eq.category.includes('thất thoát'))) || eq.type.toLowerCase().includes('chiller') || (eq.fuel && eq.fuel.includes('R-'));
+          const isFugitiveSrc = isFugitive;
+          const ratedCap = parseFloat(eq.ratedCapacity) || (std ? std.ratedCapacity : (isFugitive ? 120 : (isElec ? 45 : 100)));
+          const capUnit = eq.capacityUnit || (std ? std.capacityUnit : (isFugitive ? 'kg nạp' : (isElec ? 'kW' : 'lít/h')));
+          const loadFactor = parseFloat(eq.loadFactor) || (std ? Math.round(std.defaultLoadFactor * 100) : 80);
+          const hoursDay = parseFloat(eq.hoursDay) || (isFugitive ? 24 : 16);
+          const daysWeek = parseFloat(eq.daysWeek) || (isFugitive ? 7 : 6);
+          const finalCategory = eq.category || (std ? std.category : (isFugitive ? 'Phát thải rò rỉ' : (isElec ? 'Tiêu thụ điện' : 'Đốt cháy cố định')));
+          const finalFuel = eq.fuel || (isFugitive ? 'Môi chất lạnh R-410A' : (finalCategory.includes('điện') ? 'Điện lưới Việt Nam' : 'Dầu Diesel (DO)'));
+
+          let metrics = null;
+          if (typeof window.calcEquipmentStandardMetrics === 'function') {
+            metrics = window.calcEquipmentStandardMetrics({
+              capacity: ratedCap,
+              capUnit: capUnit,
+              fuel: finalFuel,
+              category: finalCategory,
+              load: loadFactor,
+              hoursDay: hoursDay,
+              daysWeek: daysWeek,
+              type: eq.type,
+              name: eq.name,
+              code: eq.asset
+            });
+          }
+
+          let efFactor = metrics ? metrics.efFactor : (isFugitive ? 2088 : (finalFuel.includes('Diesel') || finalFuel.includes('DO') ? 2.6853 : 0.6766));
+          let hourlyRate = metrics ? metrics.hourlyRate.toFixed(2) : (isFugitive ? '0.00' : (ratedCap * (loadFactor / 100)).toFixed(2));
+          let annualEstQty = metrics ? metrics.annualEstQty : (isFugitive ? Math.round(ratedCap * 0.03 * 100) / 100 : Math.round(parseFloat(hourlyRate) * hoursDay * daysWeek * 52));
+          let annualEstEmissions = metrics ? metrics.annualEstEmissions : Math.round((annualEstQty * parseFloat(efFactor)) / 1000);
+
+          if (matchIdx !== -1) {
+            const s = sourceList[matchIdx];
+            if (!s.opCapacity || parseFloat(s.opCapacity) <= 0) {
+              s.opCapacity = ratedCap.toString();
+              s.capacity = ratedCap.toString();
+              s.opCapUnit = capUnit;
+              s.capUnit = capUnit;
+              s.opLoad = loadFactor.toString();
+              s.load = loadFactor.toString();
+              s.opHoursDay = hoursDay.toString();
+              s.hoursDay = hoursDay.toString();
+              s.opDaysWeek = daysWeek.toString();
+              s.daysWeek = daysWeek.toString();
+              s.hourlyRate = hourlyRate;
+              s.annualEstQty = annualEstQty;
+              s.annualEstEmissions = annualEstEmissions;
+              srcModified = true;
+            }
+          } else {
+            const newSrcId = 'src_' + Math.random().toString(36).substr(2, 9);
+            sourceList.push({
+              id: newSrcId,
+              category: finalCategory,
+              type: eq.type,
+              name: `${finalCategory} - ${eq.name}`,
+              eq: eq.name,
+              eqAsset: eq.asset,
+              ef: finalFuel,
+              efFactor: efFactor.toString(),
+              efUnit: capUnit.includes('lít') ? 'kgCO2e/lít' : (capUnit.includes('kg') ? 'kgCO2e/kg' : 'kgCO2e/kWh'),
+              measure: eq.measure || 'Tự đánh giá',
+              capacity: ratedCap.toString(),
+              opCapacity: ratedCap.toString(),
+              capUnit: capUnit,
+              opCapUnit: capUnit,
+              load: loadFactor.toString(),
+              opLoad: loadFactor.toString(),
+              hoursDay: hoursDay.toString(),
+              opHoursDay: hoursDay.toString(),
+              daysWeek: daysWeek.toString(),
+              opDaysWeek: daysWeek.toString(),
+              hourlyRate: hourlyRate,
+              annualEstQty: annualEstQty,
+              annualEstEmissions: annualEstEmissions,
+              isProcessEmission: 'false',
+              createdAt: new Date().toISOString().split('T')[0],
+              updatedAt: new Date().toISOString().split('T')[0]
+            });
+            srcModified = true;
+          }
+        });
+
+        if (srcModified) {
+          const srcJson = JSON.stringify(sourceList);
+          localStorage.setItem(srcKey, srcJson);
+          localStorage.setItem(`gs_data_${rawUser}_${branchKey}_sources`, srcJson);
+          if (rawUser !== userSlug) {
+            localStorage.setItem(`gs_data_${userSlug}_${branchKey}_sources`, srcJson);
+          }
+          if (typeof loadSourceList === 'function') loadSourceList();
+          if (typeof window.autoGenerateDailyOperationalRecords === 'function') {
+            const curY = new Date().getFullYear().toString();
+            window.autoGenerateDailyOperationalRecords(curY, 'all', false);
+          }
+          if (typeof window.renderMachineOverview === 'function') window.renderMachineOverview();
+        }
+      } catch(e) {
+        console.warn('Auto-sync equipment to sources notice:', e);
+      }
     }
 
     function loadEquipmentList() {
@@ -3612,7 +3723,11 @@
       const isSteel = (!industry || industry === 'Sắt Thép' || industry.toLowerCase().includes('thép'));
 
       let templateRows = [];
-      if (typeof window.getIndustryEquipments === 'function') {
+      if (typeof window.getIndustry16TemplateRows === 'function') {
+        const mRows = window.getIndustry16TemplateRows(industry);
+        if (mRows && mRows.length > 0) templateRows = mRows;
+      }
+      if ((!templateRows || templateRows.length === 0) && typeof window.getIndustryEquipments === 'function') {
         const eqs = window.getIndustryEquipments(industry);
         if (eqs && eqs.length > 0) {
           templateRows = eqs.map((eq, idx) => {
@@ -3734,29 +3849,36 @@
         });
 
         const srcId = 'src_seed_' + (idx + 1);
+        const fuel = (r['Loại năng lượng sử dụng (Điện / Nhiên liệu đốt)'] || r.fuel || '').trim();
         const isElectric = cat.includes('điện') || cat.includes('Điện');
         const isFuel = cat.includes('Đốt cháy cố định');
         const isForklift = cat.includes('Đốt cháy động');
-        const isLeakage = cat.includes('rò rỉ');
-        const isWaste = cat.includes('nước thải') || cat.includes('chất thải');
-        
-        let efFactor = isElectric ? '0.6766' : (isFuel ? '3.151' : (isForklift ? '2.68' : '0.6766'));
-        let efUnit = isElectric ? 'kgCO2e/kWh' : (isFuel ? 'kgCO2e/kg' : (isForklift ? 'kgCO2e/lít' : 'kgCO2e/kWh'));
-        let fuelLabel = isElectric ? 'Điện lưới Việt Nam 2022' : (isFuel ? (r['Loại năng lượng sử dụng (Điện / Nhiên liệu đốt)'] || 'Dầu Diesel (DO)') : 'Dầu Diesel (DO)');
+        const isLeakage = cat.includes('rò rỉ') || cat.includes('thất thoát') || fuel.includes('R-') || fuel.includes('HFC') || type.toLowerCase().includes('chiller');
+        const isFugitiveSrc = isLeakage;
+        const isWaste = cat.includes('nước thải') || cat.includes('chất thải') || fuel.includes('nước thải');
 
-        if (isLeakage) {
-          efFactor = '2088';
-          efUnit = 'kgCO2e/kg';
-          fuelLabel = 'Môi chất lạnh R-410A';
-        } else if (isWaste) {
-          efFactor = '0.42';
-          efUnit = 'kgCO2e/m3';
-          fuelLabel = 'Nước thải sinh hoạt';
+        let metrics = null;
+        if (typeof window.calcEquipmentStandardMetrics === 'function') {
+          metrics = window.calcEquipmentStandardMetrics({
+            capacity: cap,
+            capUnit: capUnit,
+            fuel: fuel,
+            category: cat,
+            load: load,
+            hoursDay: hoursDay,
+            daysWeek: daysWeek,
+            type: type,
+            name: name,
+            code: asset
+          });
         }
 
-        const hourlyRate = (cap * (load / 100)).toFixed(2);
-        const annualEstQty = Math.round(hourlyRate * hoursDay * daysWeek * 52);
-        const annualEstEmissions = Math.round((annualEstQty * parseFloat(efFactor)) / 1000);
+        let efFactor = metrics ? metrics.efFactor.toString() : (isElectric ? '0.6766' : (isFuel ? '3.151' : (isForklift ? '2.68' : (isLeakage ? '2088' : '0.6766'))));
+        let efUnit = metrics ? metrics.efUnit : (isElectric ? 'kgCO2e/kWh' : (isFuel ? 'kgCO2e/kg' : (isForklift ? 'kgCO2e/lít' : (isLeakage ? 'kgCO2e/kg' : 'kgCO2e/kWh'))));
+        let fuelLabel = metrics ? metrics.fuelLabel : (isElectric ? 'Điện lưới Việt Nam 2022' : (fuel || 'Dầu Diesel (DO)'));
+        let hourlyRate = metrics ? metrics.hourlyRate.toFixed(2) : (isLeakage ? '0.00' : (cap * (load / 100)).toFixed(2));
+        let annualEstQty = metrics ? metrics.annualEstQty : (isLeakage ? Math.round(cap * 0.03 * 100) / 100 : Math.round(parseFloat(hourlyRate) * hoursDay * daysWeek * 52));
+        let annualEstEmissions = metrics ? metrics.annualEstEmissions : Math.round((annualEstQty * parseFloat(efFactor)) / 1000);
 
         srcList.push({
           id: srcId,
@@ -4205,7 +4327,7 @@
 
       try {
         const toast = document.createElement('div');
-        toast.textContent = `📥 Đang tải file mẫu thiết bị Excel cho ngành: ${currentIndustry}`;
+        toast.textContent = `Đang tải file mẫu thiết bị Excel cho ngành: ${currentIndustry}`;
         toast.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#0284c7;color:#fff;padding:10px 22px;border-radius:8px;font-size:0.85rem;font-weight:600;z-index:99999;box-shadow:0 4px 16px rgba(0,0,0,0.2);';
         document.body.appendChild(toast);
         setTimeout(() => toast.remove(), 3500);
@@ -4363,7 +4485,7 @@
 
       try {
         const dlToast = document.createElement('div');
-        dlToast.textContent = '📥 Đã tải file mẫu về máy! Bạn có thể chỉnh sửa rồi bấm "Tải thiết bị", hoặc bấm "Nạp mẫu chuẩn" / "Đặt lại dữ liệu" để nạp trực tiếp vào hệ thống.';
+        dlToast.textContent = 'Đã tải file mẫu về máy! Bạn có thể chỉnh sửa rồi bấm "Tải thiết bị", hoặc bấm "Nạp mẫu chuẩn" / "Đặt lại dữ liệu" để nạp trực tiếp vào hệ thống.';
         dlToast.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#0284c7;color:#fff;padding:12px 24px;border-radius:8px;font-size:0.85rem;z-index:99999;box-shadow:0 4px 16px rgba(0,0,0,0.2);max-width:90%;text-align:center;line-height:1.4;';
         document.body.appendChild(dlToast);
         setTimeout(() => dlToast.remove(), 4500);
@@ -4457,7 +4579,7 @@
         if (typeof window.applyFilter === 'function') window.applyFilter();
 
         const toast = document.createElement('div');
-        toast.textContent = `🎉 Đã nạp thành công bộ dữ liệu mẫu chuẩn ngành ${ind} 2026 (Thiết bị, Nguồn phát thải, 12 tháng hoạt động & Hóa đơn đối soát)!`;
+        toast.textContent = `Đã nạp thành công bộ dữ liệu mẫu chuẩn ngành ${ind} 2026 (Thiết bị, Nguồn phát thải, 12 tháng hoạt động & Hóa đơn đối soát)!`;
         toast.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#1a7f4b;color:#fff;padding:12px 24px;border-radius:8px;font-size:0.85rem;z-index:99999;box-shadow:0 4px 16px rgba(0,0,0,0.2);max-width:90%;text-align:center;line-height:1.4;';
         document.body.appendChild(toast);
         setTimeout(() => toast.remove(), 4000);
@@ -4561,27 +4683,46 @@
               const finalCategory = category || (std ? std.category : (isElec ? 'Tiêu thụ điện' : 'Đốt cháy cố định'));
               const finalFuel = fuel || (finalCategory.includes('điện') ? 'Điện lưới Việt Nam' : (type.toLowerCase().includes('than') ? 'Than mỡ (Bituminous coal)' : 'Dầu Diesel (DO)'));
 
-              const hourlyRate = (typeof window.calcEquipmentHourlyRate === 'function') 
-                ? window.calcEquipmentHourlyRate(ratedCap, loadFactor)
-                : Math.round(ratedCap * (loadFactor / 100) * 1000) / 1000;
+              let metrics = null;
+              if (typeof window.calcEquipmentStandardMetrics === 'function') {
+                metrics = window.calcEquipmentStandardMetrics({
+                  capacity: ratedCap,
+                  capUnit: capUnit,
+                  fuel: finalFuel,
+                  category: finalCategory,
+                  load: loadFactor,
+                  hoursDay: hoursDay,
+                  daysWeek: daysWeek,
+                  type: type,
+                  name: name,
+                  code: asset
+                });
+              }
 
-              const ann = (typeof window.calcEquipmentAnnual === 'function')
+              const isFugitiveEq = metrics ? metrics.isFugitive : (finalCategory.includes('rò rỉ') || finalCategory.includes('thất thoát') || finalFuel.includes('R-') || type.toLowerCase().includes('chiller'));
+              const hourlyRate = metrics ? metrics.hourlyRate : (isFugitiveEq ? 0 : ((typeof window.calcEquipmentHourlyRate === 'function') 
+                ? window.calcEquipmentHourlyRate(ratedCap, loadFactor)
+                : Math.round(ratedCap * (loadFactor / 100) * 1000) / 1000));
+
+              const ann = metrics ? { annual: metrics.annualEstQty } : (isFugitiveEq ? { annual: Math.round(ratedCap * 0.03 * 100) / 100 } : ((typeof window.calcEquipmentAnnual === 'function')
                 ? window.calcEquipmentAnnual(ratedCap, loadFactor, hoursDay, daysWeek)
-                : { annual: Math.round(hourlyRate * hoursDay * daysWeek * 52 * 1000) / 1000 };
+                : { annual: Math.round(hourlyRate * hoursDay * daysWeek * 52 * 1000) / 1000 }));
               const annualEstQty = ann.annual;
 
-              let efFactor = 0.6766;
-              if (finalFuel.includes('Diesel') || finalFuel.includes('DO')) efFactor = 2.6853;
-              else if (finalFuel.includes('FO') || finalFuel.includes('Fuel Oil') || finalFuel.includes('Mazut')) efFactor = 3.127;
-              else if (finalFuel.includes('Than')) efFactor = 2.45;
-              else if (finalFuel.includes('Xăng')) efFactor = 2.27;
-              else if (finalFuel.includes('LPG')) efFactor = 1.61;
-              else if (finalFuel.includes('Khí tự nhiên') || finalFuel.includes('NG')) efFactor = 2.16;
-              else if (finalFuel.includes('R-410A') || finalFuel.includes('R410A')) efFactor = 2088;
-              else if (finalFuel.includes('R-22') || finalFuel.includes('R22')) efFactor = 1810;
-              else if (finalFuel.includes('CO2') || finalFuel.includes('Khí CO2')) efFactor = 1.0;
-              else if (finalFuel.includes('Nước thải') || finalFuel.includes('Nuoc thai')) efFactor = 0.5;
-              const annualEstEmissions = Math.round((annualEstQty * efFactor / 1000) * 100) / 100;
+              let efFactor = metrics ? metrics.efFactor : 0.6766;
+              if (!metrics) {
+                if (finalFuel.includes('Diesel') || finalFuel.includes('DO')) efFactor = 2.6853;
+                else if (finalFuel.includes('FO') || finalFuel.includes('Fuel Oil') || finalFuel.includes('Mazut')) efFactor = 3.127;
+                else if (finalFuel.includes('Than')) efFactor = 2.45;
+                else if (finalFuel.includes('Xăng')) efFactor = 2.27;
+                else if (finalFuel.includes('LPG')) efFactor = 1.61;
+                else if (finalFuel.includes('Khí tự nhiên') || finalFuel.includes('NG')) efFactor = 2.16;
+                else if (finalFuel.includes('R-410A') || finalFuel.includes('R410A')) efFactor = 2088;
+                else if (finalFuel.includes('R-22') || finalFuel.includes('R22')) efFactor = 1810;
+                else if (finalFuel.includes('CO2') || finalFuel.includes('Khí CO2')) efFactor = 1.0;
+                else if (finalFuel.includes('Nước thải') || finalFuel.includes('Nuoc thai')) efFactor = 0.5;
+              }
+              const annualEstEmissions = metrics ? metrics.annualEstEmissions : Math.round((annualEstQty * efFactor / 1000) * 100) / 100;
 
               // 1. Cập nhật Danh mục Thiết bị
               const existingEqIdx = asset ? currentList.findIndex(x => x.asset === asset) : -1;
@@ -5582,10 +5723,12 @@
         annualEstEmissions = Math.round(annualEstQty * efInT * 100) / 100;
       } else if (measure === 'Tự đánh giá' && opCapacity) {
         const totalOpCap = (parseFloat(opCapacity) || 0) * opQuantity;
-        hourlyRate = window.calcEquipmentHourlyRate ? window.calcEquipmentHourlyRate(totalOpCap, opLoad) : Math.round(totalOpCap * (parseFloat(opLoad) / 100) * 1000) / 1000;
-        const ann = window.calcEquipmentAnnual ? window.calcEquipmentAnnual(totalOpCap, opLoad, opHoursDay, opDaysWeek) : { annual: Math.round(hourlyRate * parseFloat(opHoursDay) * parseFloat(opDaysWeek) * 52 * 1000) / 1000 };
+        const isFugitiveSrc = (currentSourceCategory.includes('rò rỉ') || currentSourceCategory.includes('thất thoát') || (refrigerant && refrigerant !== '') || fuel.includes('R-') || type.toLowerCase().includes('chiller'));
+        const extra = { unit: opCapUnit, capUnit: opCapUnit, fuel: fuel, category: currentSourceCategory, type: type, name: eq, hoursDay: opHoursDay, daysWeek: opDaysWeek };
+        hourlyRate = isFugitiveSrc ? 0 : (window.calcEquipmentHourlyRate ? window.calcEquipmentHourlyRate(totalOpCap, opLoad, extra) : Math.round(totalOpCap * (parseFloat(opLoad) / 100) * 1000) / 1000);
+        const ann = isFugitiveSrc ? { annual: Math.round(totalOpCap * 0.03 * 100) / 100 } : (window.calcEquipmentAnnual ? window.calcEquipmentAnnual(totalOpCap, opLoad, opHoursDay, opDaysWeek, extra) : { annual: Math.round(hourlyRate * parseFloat(opHoursDay) * parseFloat(opDaysWeek) * 52 * 1000) / 1000 });
         annualEstQty = ann.annual;
-        const efNum = parseFloat(customFactor) || 0.6766;
+        const efNum = parseFloat(customFactor) || (isFugitiveSrc ? 2088 : 0.6766);
         annualEstEmissions = Math.round((annualEstQty * efNum / 1000) * 100) / 100;
       }
 
@@ -6736,7 +6879,7 @@
                 XLSX.writeFile(wb, `${fileName}.xlsx`);
 
                 const toast = document.createElement('div');
-                toast.textContent = `📊 Đã xuất thành công Sổ kiểm kê & Bảng tính Excel 5 phân hệ cho Năm ${selectedYear}!`;
+                toast.textContent = `Đã xuất thành công Sổ kiểm kê & Bảng tính Excel 5 phân hệ cho Năm ${selectedYear}!`;
                 toast.style.cssText = 'position:fixed;bottom:24px;left:50%;transform:translateX(-50%);background:#059669;color:#fff;padding:12px 24px;border-radius:8px;font-size:0.88rem;font-weight:600;z-index:99999;box-shadow:0 4px 16px rgba(0,0,0,0.2);max-width:90%;text-align:center;line-height:1.4;';
                 document.body.appendChild(toast);
                 setTimeout(() => toast.remove(), 4500);

@@ -735,6 +735,34 @@
         } catch(e) {}
       }
 
+      // Self-healing: Tự động chuẩn hóa dữ liệu cũ nếu Chiller hoặc Môi chất lạnh bị ghi nhận theo giờ thay vì rò rỉ hàng năm
+      if (stored && stored !== '[]') {
+        try {
+          const parsedActs = JSON.parse(stored);
+          let actsCleaned = false;
+          parsedActs.forEach(act => {
+            const sName = (act.sourceName || '').toLowerCase();
+            const sType = (act.sourceType || '').toLowerCase();
+            const isFugitiveAct = sName.includes('chiller') || sName.includes('r-410a') || sName.includes('gas lạnh') || sType.includes('rò rỉ') || sType.includes('thất thoát');
+            if (isFugitiveAct && parseFloat(act.amount) > 100) {
+              act.amount = '1.8';
+              act.unit = 'kg';
+              const ef = parseFloat(act.finalFactor) || 2088;
+              act.co2e = (1.8 * ef).toFixed(2);
+              if (act.doc && act.doc.includes('Vận hành ca')) {
+                act.doc = 'Bảo dưỡng định kỳ & nạp gas lạnh';
+              }
+              actsCleaned = true;
+            }
+          });
+          if (actsCleaned) {
+            safeSaveActivities(normActKey, parsedActs);
+            stored = JSON.stringify(parsedActs);
+            _lastLoadedActDataStr = '';
+          }
+        } catch(e) {}
+      }
+
       // Tối ưu hiệu năng: Nếu dữ liệu không đổi và bảng đã có dòng, chỉ lọc lại nhanh thay vì vẽ lại toàn bộ DOM
       if (stored && stored === _lastLoadedActDataStr && tbody.querySelectorAll('tr:not(#no-activity-row)').length > 0) {
         applyFilter(actHiddenFilter.value);
@@ -1111,6 +1139,23 @@
       const searchName = refName || efName;
       if (!searchName) return { factor, unit };
       
+      const sLower = searchName.toLowerCase();
+      if (sLower.includes('nh3') || sLower.includes('r-717') || sLower.includes('amoniac')) {
+        return { factor: 0, unit: 'kgCO2e/kg', source: 'IPCC GWP=0' };
+      }
+      if (sLower.includes('co2') && (sLower.includes('khí co2') || sLower.includes('chữa cháy') || sLower.includes('thực phẩm'))) {
+        return { factor: 1.0, unit: 'kgCO2e/kg', source: 'IPCC GWP=1' };
+      }
+      if (sLower.includes('hfc-227ea') || sLower.includes('fm200') || sLower.includes('fm-200')) {
+        return { factor: 3220, unit: 'kgCO2e/kg', source: 'IPCC AR4' };
+      }
+      if (sLower.includes('r-404a') || sLower.includes('r404a')) {
+        return { factor: 3922, unit: 'kgCO2e/kg', source: 'IPCC AR4' };
+      }
+      if (sLower.includes('sf6') || sLower.includes('sulfur hexafluoride')) {
+        return { factor: 22800, unit: 'kgCO2e/kg', source: 'IPCC AR4' };
+      }
+
       // Dynamic IPCC AR lookup for refrigerants
       if (refName && window.IPCC_DB) {
           const userStr = localStorage.getItem('gs_current_user');
@@ -2398,7 +2443,9 @@
       const numCo2e = parseFloat(data.co2e) || 0;
       const docLower = (data.doc || '').toLowerCase();
       const unitLower = (data.unit || '').toLowerCase();
-      const isDowntime = (data.isDowntime === 'true' || data.recordType === 'downtime' || docLower.includes('bảo trì') || docLower.includes('dừng máy'));
+      const isDowntime = (data.isDowntime === 'true' || data.recordType === 'downtime' || 
+                         ((docLower.includes('dừng máy') || docLower.includes('sự cố dừng') || docLower.includes('ngừng hoạt động') || docLower.includes('dừng lò') || (docLower.includes('bảo trì') && !docLower.includes('nạp gas') && !docLower.includes('vận hành') && !docLower.includes('chạy thử') && numAmt <= 0))) &&
+                         !docLower.includes('vận hành thực tế'));
       const isOvertime = (data.isOvertime === 'true' || data.recordType === 'overtime' || docLower.includes('tăng ca'));
       const isInvoice = (data.isInvoice === 'true');
       const isActualProd = (data.recordType === 'actual_production' || data.recordType === 'production') ||
@@ -2665,7 +2712,9 @@
             if (fileLabel) fileLabel.innerText = 'Đính kèm Phiếu cân / Nhật ký ca máy (Ảnh, PDF)';
           } else if (userRole !== 'accountant') {
             // Khôi phục tính chất Dừng máy hay Vận hành chuẩn hay Có tăng ca
-            const isRowDowntime = (data.isDowntime === 'true' || data.recordType === 'downtime' || docLower.includes('bảo trì') || docLower.includes('dừng máy'));
+            const isRowDowntime = (data.isDowntime === 'true' || data.recordType === 'downtime' || 
+                                  ((docLower.includes('dừng máy') || docLower.includes('sự cố dừng') || docLower.includes('ngừng hoạt động') || docLower.includes('dừng lò') || (docLower.includes('bảo trì') && !docLower.includes('nạp gas') && !docLower.includes('vận hành') && !docLower.includes('chạy thử') && parseFloat(data.amount) <= 0))) &&
+                                  !docLower.includes('vận hành thực tế'));
             const isRowOvertime = (data.isOvertime === 'true' || data.recordType === 'overtime' || docLower.includes('tăng ca'));
             let recordTypeVal = 'normal';
             if (isRowDowntime) recordTypeVal = 'downtime';
@@ -2913,6 +2962,27 @@
 
     if (btnCalcTow && towModal) {
       btnCalcTow.addEventListener('click', () => {
+        // Tự động điền trước số ngày làm việc & hệ số BOD nếu chưa có
+        const daysInput = document.getElementById('tow-days');
+        if (daysInput && (!daysInput.value || daysInput.value === '0')) {
+          daysInput.value = '300';
+        }
+        const factorInput = document.getElementById('tow-bod-factor');
+        if (factorInput && (!factorInput.value || factorInput.value === '0')) {
+          factorInput.value = '0.04';
+        }
+        const empInput = document.getElementById('tow-employees');
+        if (empInput && (!empInput.value || empInput.value === '0')) {
+          try {
+            const comp = JSON.parse(localStorage.getItem('gs_v2_company') || '{}');
+            const cEmp = comp.employees || comp.employeeCount;
+            if (cEmp) empInput.value = cEmp;
+            else {
+              const wwMeta = JSON.parse(localStorage.getItem('gs_wastewater_params') || '{}');
+              if (wwMeta.emp) empInput.value = wwMeta.emp;
+            }
+          } catch(e) {}
+        }
         towModal.style.display = 'flex';
       });
 
@@ -2950,19 +3020,51 @@
 
       btnApplyTow.addEventListener('click', () => {
         let calculatedTow = 0;
+        let empCount = 0;
+        let workDays = 300;
+        let bodFactor = 0.04;
+
         if (currentTowTab === 1) {
           const vol = parseFloat(document.getElementById('tow-volume').value) || 0;
           const bod = parseFloat(document.getElementById('tow-bod-concentration').value) || 0;
           calculatedTow = (vol * bod) / 1000;
         } else {
-          const emp = parseFloat(document.getElementById('tow-employees').value) || 0;
-          const days = parseFloat(document.getElementById('tow-days').value) || 0;
-          const factor = parseFloat(document.getElementById('tow-bod-factor').value) || 0;
-          calculatedTow = emp * days * factor;
+          empCount = parseFloat(document.getElementById('tow-employees').value) || 0;
+          let days = parseFloat(document.getElementById('tow-days').value) || 0;
+          if (days <= 0) {
+            // Tự động kế thừa ngày hoạt động nhà máy: 52 tuần * 6 ngày - 12 ngày lễ = 300 ngày
+            days = 300;
+            const daysInput = document.getElementById('tow-days');
+            if (daysInput) daysInput.value = '300';
+          }
+          workDays = days;
+
+          let factor = parseFloat(document.getElementById('tow-bod-factor').value) || 0;
+          if (factor <= 0) {
+            // Chuẩn IPCC 2006 Vol 5 & QĐ 43: 40 g BOD/người/ngày = 0.04 kg BOD/người/ngày
+            factor = 0.04;
+            const factorInput = document.getElementById('tow-bod-factor');
+            if (factorInput) factorInput.value = '0.04';
+          }
+          bodFactor = factor;
+
+          calculatedTow = empCount * workDays * bodFactor;
         }
         
         const amountInput = document.getElementById('activity-amount');
         if (amountInput) amountInput.value = calculatedTow.toFixed(2);
+
+        // Lưu thông số chi tiết phục vụ xuất Báo cáo KNK Word (Bảng 3.8 & 3.14)
+        try {
+          const wwParams = {
+            emp: empCount,
+            days: workDays,
+            hours: 8,
+            bodFactor: bodFactor,
+            calculatedTow: calculatedTow
+          };
+          localStorage.setItem('gs_wastewater_params', JSON.stringify(wwParams));
+        } catch(e) {}
         
         towModal.style.display = 'none';
       });
@@ -3016,26 +3118,33 @@
                        measure.includes('sản lượng') || 
                        Boolean(row.dataset.productionUnit) ||
                        (row.dataset.category && row.dataset.category.includes('công nghiệp'));
+        const isFugitive = (row.dataset.category && (row.dataset.category.includes('rò rỉ') || row.dataset.category.includes('thất thoát'))) || 
+                           (eqName && (eqName.toLowerCase().includes('chiller') || eqName.toLowerCase().includes('điều hòa'))) ||
+                           Boolean(row.dataset.refrigerant);
         const loadVal = parseFloat(row.dataset.opLoad) || (isProc ? 100 : 80);
-        const hRate = parseFloat(row.dataset.hourlyRate) || (opCap > 0 ? Math.round(opCap * (loadVal / 100) * 1000) / 1000 : 0);
+        const hRate = isFugitive ? 0 : (parseFloat(row.dataset.hourlyRate) || (opCap > 0 ? Math.round(opCap * (loadVal / 100) * 1000) / 1000 : 0));
+        const annQty = isFugitive
+          ? (parseFloat(row.dataset.annualEstQty) || (opCap > 0 ? Math.round(opCap * 0.03 * 100) / 100 : 3.6))
+          : (parseFloat(row.dataset.annualEstQty) || 0);
 
-        if (measure.includes('tự đánh giá') || measure.includes('liên tục') || measure.includes('đo') || measure.includes('ước tính') || opCap > 0 || hRate > 0 || isProc) {
+        if (measure.includes('tự đánh giá') || measure.includes('liên tục') || measure.includes('đo') || measure.includes('ước tính') || opCap > 0 || hRate > 0 || isProc || isFugitive) {
           machineSources.push({
             id: row.dataset.id,
             name: isProc ? `${row.dataset.type || 'Quá trình luyện thép'}${row.dataset.eq ? ' - ' + row.dataset.eq : ''}` : eqName,
             type: row.dataset.type || '',
-            category: row.dataset.category || '',
-            measure: isProc ? 'Theo sản lượng (IPPU)' : (row.dataset.measure || 'Tự đánh giá'),
+            category: row.dataset.category || (isFugitive ? 'Phát thải rò rỉ' : ''),
+            measure: isProc ? 'Theo sản lượng (IPPU)' : (isFugitive ? 'Nhật ký bảo trì & nạp gas lạnh' : (row.dataset.measure || 'Tự đánh giá')),
             isProc: isProc,
+            isFugitive: isFugitive,
             productionUnit: row.dataset.productionUnit || 'tấn',
             capacity: opCap,
-            capUnit: isProc ? (row.dataset.productionUnit || 'tấn') : (row.dataset.opCapUnit || 'kW'),
+            capUnit: isProc ? (row.dataset.productionUnit || 'tấn') : (isFugitive ? 'kg nạp' : (row.dataset.opCapUnit || 'kW')),
             load: isProc ? 100 : loadVal,
             hourlyRate: hRate,
-            hoursDay: parseFloat(row.dataset.opHoursDay) || (isProc ? 8 : 16),
-            daysWeek: parseFloat(row.dataset.opDaysWeek) || 6,
-            annualEstQty: parseFloat(row.dataset.annualEstQty) || 0,
-            efFactor: parseFloat(row.dataset.efFactor) || (isProc ? 60 : 0.6766)
+            hoursDay: parseFloat(row.dataset.opHoursDay) || (isProc ? 8 : (isFugitive ? 24 : 16)),
+            daysWeek: parseFloat(row.dataset.opDaysWeek) || (isFugitive ? 7 : 6),
+            annualEstQty: annQty,
+            efFactor: parseFloat(row.dataset.efFactor) || (isProc ? 60 : (isFugitive ? 2088 : 0.6766))
           });
         }
       });
@@ -3059,30 +3168,38 @@
           sources.forEach(src => {
             const measure = (src.measure || src.measurementMethod || '').toLowerCase();
             const opCap = parseFloat(src.opCapacity || src.capacity) || 0;
+            const eqName = src.eq || src.type || src.name || '';
             const isProc = src.isProcessEmission === 'true' || 
                            measure.includes('sản lượng') || 
                            Boolean(src.productionUnit) ||
                            (src.category && src.category.includes('công nghiệp'));
+            const isFugitive = (src.category && (src.category.includes('rò rỉ') || src.category.includes('thất thoát'))) || 
+                               (eqName && (eqName.toLowerCase().includes('chiller') || eqName.toLowerCase().includes('điều hòa'))) ||
+                               Boolean(src.refrigerant);
             const loadVal = parseFloat(src.opLoad || src.load) || (isProc ? 100 : 80);
-            const hRate = parseFloat(src.hourlyRate) || (opCap > 0 ? Math.round(opCap * (loadVal / 100) * 1000) / 1000 : 0);
+            const hRate = isFugitive ? 0 : (parseFloat(src.hourlyRate) || (opCap > 0 ? Math.round(opCap * (loadVal / 100) * 1000) / 1000 : 0));
+            const annQty = isFugitive
+              ? (parseFloat(src.annualEstQty) || (opCap > 0 ? Math.round(opCap * 0.03 * 100) / 100 : 3.6))
+              : (parseFloat(src.annualEstQty) || 0);
 
-            if (measure.includes('tự đánh giá') || measure.includes('liên tục') || measure.includes('đo') || measure.includes('ước tính') || opCap > 0 || hRate > 0 || isProc) {
+            if (measure.includes('tự đánh giá') || measure.includes('liên tục') || measure.includes('đo') || measure.includes('ước tính') || opCap > 0 || hRate > 0 || isProc || isFugitive) {
               machineSources.push({
                 id: src.id,
-                name: isProc ? `${src.type || 'Quá trình luyện thép'}${src.eq ? ' - ' + src.eq : ''}` : (src.eq || src.type || src.name || ''),
+                name: isProc ? `${src.type || 'Quá trình luyện thép'}${src.eq ? ' - ' + src.eq : ''}` : eqName,
                 type: src.type || '',
-                category: src.category || '',
-                measure: isProc ? 'Theo sản lượng (IPPU)' : (src.measure || 'Tự đánh giá'),
+                category: src.category || (isFugitive ? 'Phát thải rò rỉ' : ''),
+                measure: isProc ? 'Theo sản lượng (IPPU)' : (isFugitive ? 'Nhật ký bảo trì & nạp gas lạnh' : (src.measure || 'Tự đánh giá')),
                 isProc: isProc,
+                isFugitive: isFugitive,
                 productionUnit: src.productionUnit || 'tấn',
                 capacity: opCap,
-                capUnit: isProc ? (src.productionUnit || 'tấn') : (src.opCapUnit || src.capUnit || 'kW'),
+                capUnit: isProc ? (src.productionUnit || 'tấn') : (isFugitive ? 'kg nạp' : (src.opCapUnit || src.capUnit || 'kW')),
                 load: isProc ? 100 : loadVal,
                 hourlyRate: hRate,
-                hoursDay: parseFloat(src.opHoursDay || src.hoursDay) || (isProc ? 8 : 16),
-                daysWeek: parseFloat(src.opDaysWeek || src.daysWeek) || 6,
-                annualEstQty: parseFloat(src.annualEstQty) || 0,
-                efFactor: parseFloat(src.efFactor) || (isProc ? 60 : 0.6766)
+                hoursDay: parseFloat(src.opHoursDay || src.hoursDay) || (isProc ? 8 : (isFugitive ? 24 : 16)),
+                daysWeek: parseFloat(src.opDaysWeek || src.daysWeek) || (isFugitive ? 7 : 6),
+                annualEstQty: annQty,
+                efFactor: parseFloat(src.efFactor) || (isProc ? 60 : (isFugitive ? 2088 : 0.6766))
               });
             }
           });
@@ -3185,7 +3302,7 @@
             } else if (otHours > 0) {
               const otQty = Math.round(otHours * (ms.hourlyRate || 0) * 100) / 100;
               totalAdjustmentQty += otQty;
-            } else if (ar.isDowntime === 'true' || ((doc.includes('dừng') || doc.includes('bảo trì')) && !doc.includes('vận hành thực tế'))) {
+            } else if (ar.isDowntime === 'true' || ar.recordType === 'downtime' || ((doc.includes('dừng máy') || doc.includes('sự cố dừng') || doc.includes('ngừng hoạt động') || doc.includes('sự cố gián đoạn') || doc.includes('dừng lò')) && !doc.includes('vận hành thực tế') && !doc.includes('nạp gas') && !doc.includes('chạy thử'))) {
               totalAdjustmentQty -= Math.abs(amt);
               if (ms.hourlyRate > 0) {
                 totalDowntimeHours += Math.round((Math.abs(amt) / ms.hourlyRate) * 10) / 10;
@@ -3196,9 +3313,12 @@
           }
         });
 
-        const consumptionUnit = normalizeConsumptionUnit(ms.capUnit, ms.type);
-        const rateUnitDisplay = formatRateUnit(ms.capUnit, ms.type);
-        const baseAnnual = ms.annualEstQty > 0 ? ms.annualEstQty : Math.round(ms.hourlyRate * ms.hoursDay * ms.daysWeek * 52 * 1000) / 1000;
+        const isFugitive = ms.isFugitive || (ms.category && (ms.category.includes('rò rỉ') || ms.category.includes('thất thoát'))) || (ms.name && (ms.name.toLowerCase().includes('chiller') || ms.name.toLowerCase().includes('điều hòa')));
+        const consumptionUnit = isFugitive ? 'kg' : normalizeConsumptionUnit(ms.capUnit, ms.type);
+        const rateUnitDisplay = isFugitive ? '—' : formatRateUnit(ms.capUnit, ms.type);
+        const baseAnnual = isFugitive 
+          ? (ms.annualEstQty > 0 ? ms.annualEstQty : (ms.capacity > 0 ? Math.round(ms.capacity * 0.03 * 100) / 100 : 3.6))
+          : (ms.annualEstQty > 0 ? ms.annualEstQty : (typeof window.calcEquipmentAnnual === 'function' ? window.calcEquipmentAnnual(ms.capacity, ms.load, ms.hoursDay, ms.daysWeek, { unit: ms.capUnit, fuel: ms.ef, category: ms.category, type: ms.type, name: ms.name }).annual : Math.round(ms.hourlyRate * ms.hoursDay * ms.daysWeek * 52 * 1000) / 1000));
         const actualQty = Math.max(0, Math.round((baseAnnual + totalAdjustmentQty) * 1000) / 1000);
         const emissions = Math.round((actualQty * ms.efFactor / 1000) * 100) / 100;
 
@@ -3215,8 +3335,8 @@
           <td style="padding: 0.5rem 0.6rem; color: #64748b;">${ms.measure}</td>
           <td style="padding: 0.5rem 0.6rem; text-align: right;">${ms.capacity ? ms.capacity.toLocaleString('vi-VN') + ' ' + ms.capUnit : '—'}</td>
           <td style="padding: 0.5rem 0.6rem; text-align: right;">${ms.load}%</td>
-          <td style="padding: 0.5rem 0.6rem; text-align: right; font-weight: 600; color: var(--color-primary);">${ms.hourlyRate ? ms.hourlyRate.toLocaleString('vi-VN') + ' ' + rateUnitDisplay : '—'}</td>
-          <td style="padding: 0.5rem 0.6rem; text-align: right; color: #64748b;">${ms.hoursDay}h/ngày × ${ms.daysWeek}d/w</td>
+          <td style="padding: 0.5rem 0.6rem; text-align: right; font-weight: 600; color: var(--color-primary);">${isFugitive ? '—' : (ms.hourlyRate ? ms.hourlyRate.toLocaleString('vi-VN') + ' ' + rateUnitDisplay : '—')}</td>
+          <td style="padding: 0.5rem 0.6rem; text-align: right; color: #64748b;">${isFugitive ? ms.hoursDay + 'h/ngày (hệ kín)' : ms.hoursDay + 'h/ngày × ' + ms.daysWeek + 'd/w'}</td>
           <td style="padding: 0.5rem 0.6rem; text-align: right;">${baseAnnual.toLocaleString('vi-VN')} ${consumptionUnit}</td>
           <td style="padding: 0.5rem 0.6rem; text-align: right; color: ${totalAdjustmentQty < 0 ? '#dc2626' : (totalAdjustmentQty > 0 ? '#16a34a' : '#64748b')}; font-weight: 500;">
             ${adjustText}
@@ -3337,14 +3457,17 @@
               totalAdjustmentQty -= Math.round(dtHours * (ms.hourlyRate || 0) * 100) / 100;
             } else if (otHours > 0) {
               totalAdjustmentQty += Math.round(otHours * (ms.hourlyRate || 0) * 100) / 100;
-            } else if (ar.isDowntime === 'true' || ((doc.includes('dừng') || doc.includes('bảo trì')) && !doc.includes('vận hành thực tế'))) {
+            } else if (ar.isDowntime === 'true' || ar.recordType === 'downtime' || ((doc.includes('dừng máy') || doc.includes('sự cố dừng') || doc.includes('ngừng hoạt động') || doc.includes('sự cố gián đoạn') || doc.includes('dừng lò')) && !doc.includes('vận hành thực tế') && !doc.includes('nạp gas') && !doc.includes('chạy thử'))) {
               totalAdjustmentQty -= Math.abs(ar.amt);
             } else if (doc.includes('tăng ca') && !doc.includes('vận hành thực tế')) {
               totalAdjustmentQty += ar.amt;
             }
           }
         });
-        const baseAnnual = ms.annualEstQty > 0 ? ms.annualEstQty : Math.round(ms.hourlyRate * ms.hoursDay * ms.daysWeek * 52 * 1000) / 1000;
+        const isFugitive = ms.isFugitive || (ms.category && (ms.category.includes('rò rỉ') || ms.category.includes('thất thoát'))) || (ms.name && (ms.name.toLowerCase().includes('chiller') || ms.name.toLowerCase().includes('điều hòa')));
+        const baseAnnual = isFugitive 
+          ? (ms.annualEstQty > 0 ? ms.annualEstQty : (ms.capacity > 0 ? Math.round(ms.capacity * 0.03 * 100) / 100 : 3.6))
+          : (ms.annualEstQty > 0 ? ms.annualEstQty : Math.round(ms.hourlyRate * ms.hoursDay * ms.daysWeek * 52 * 1000) / 1000);
         const actualQty = Math.max(0, Math.round((baseAnnual + totalAdjustmentQty) * 1000) / 1000);
         const capUnit = (ms.capUnit || '').toLowerCase();
         const type = (ms.type || '').toLowerCase();
@@ -3681,6 +3804,12 @@
           const hDay = parseFloat(src.opHoursDay) || 8;
           const isProc = src.isProcessEmission === 'true' || (src.category && src.category.includes('công nghiệp'));
 
+          const isFugitive = (src.category && (src.category.includes('rò rỉ') || src.category.includes('thất thoát'))) ||
+                             (src.type && (src.type.toLowerCase().includes('chiller') || src.type.toLowerCase().includes('chữa cháy') || src.type.toLowerCase().includes('pccc'))) ||
+                             Boolean(src.refrigerant);
+          const isWastewater = (src.category && src.category.toLowerCase().includes('nước thải')) ||
+                               (src.type && src.type.toLowerCase().includes('nước thải'));
+
           if (isProc) {
             if (src.annualEstQty <= 0) return; // Chỉ phân bổ khi có kế hoạch sản lượng năm
             let totalActiveDaysInYear = 0;
@@ -3700,6 +3829,40 @@
             dailyQty = Math.round((src.annualEstQty / totalActiveDaysInYear) * 1000) / 1000;
             unitName = src.productionUnit || 'tấn';
             docStr = `Định mức công nghệ (${dailyQty} ${unitName}/ngày)`;
+          } else if (isFugitive) {
+            const opCap = parseFloat(src.opCapacity) || 120;
+            const annLeakQty = src.annualEstQty > 0 ? src.annualEstQty : Math.round(opCap * 0.03 * 100) / 100;
+            dailyQty = Math.round((annLeakQty / 2) * 100) / 100;
+            if (dailyQty <= 0) dailyQty = 1.8;
+            unitName = 'kg';
+            docStr = 'Bảo dưỡng định kỳ & nạp gas lạnh';
+          } else if (isWastewater) {
+            const opCap = parseFloat(src.opCapacity) || 120;
+            const opLoad = parseFloat(src.opLoad) || 80;
+            const dailyVol = opCap * (opLoad / 100);
+            dailyQty = src.annualEstQty > 0 ? Math.round((src.annualEstQty / 12) * 100) / 100 : Math.round(dailyVol * 25 * 100) / 100;
+            unitName = 'm3';
+            docStr = 'Quan trắc lưu lượng nước thải tháng';
+          } else if ((src.opCapUnit || '').includes('/năm')) {
+            const totalAnnual = src.annualEstQty > 0 ? src.annualEstQty : (parseFloat(src.opCapacity) || 0) * ((parseFloat(src.opLoad) || 80) / 100);
+            const annualWorkDays = Math.min(312, Math.round(dWeek * 52)) || 300;
+            dailyQty = Math.round((totalAnnual / annualWorkDays) * 100) / 100;
+            const rawUnit = (src.opCapUnit || '').replace('/năm', '').trim() || 'lít';
+            unitName = normalizeConsumptionUnit(rawUnit, src.type);
+            docStr = `Định mức vận hành phương tiện (${dailyQty} ${unitName}/ngày)`;
+          } else if ((src.opCapUnit || '').includes('/tháng')) {
+            const totalMonthly = (parseFloat(src.opCapacity) || 0) * ((parseFloat(src.opLoad) || 80) / 100);
+            const monthWorkDays = Math.round(dWeek * 4.33) || 25;
+            dailyQty = Math.round((totalMonthly / monthWorkDays) * 100) / 100;
+            const rawUnit = (src.opCapUnit || '').replace('/tháng', '').trim() || 'kg';
+            unitName = normalizeConsumptionUnit(rawUnit, src.type);
+            docStr = `Định mức bếp ăn (${dailyQty} ${unitName}/ngày)`;
+          } else if ((src.opCapUnit || '').toLowerCase() === 'kw' && (src.ef || '').toLowerCase().includes('diesel')) {
+            const kwNet = (parseFloat(src.opCapacity) || 0) * ((parseFloat(src.opLoad) || 80) / 100);
+            const fuelRate = Math.round(kwNet * 0.25 * 1000) / 1000;
+            dailyQty = Math.round(fuelRate * hDay * 100) / 100;
+            unitName = 'lít';
+            docStr = `Chạy thử định kỳ máy phát/bơm (${hDay}h)`;
           } else {
             const opCap = parseFloat(src.opCapacity) || 0;
             const opLoad = parseFloat(src.opLoad) || 80;
@@ -3766,19 +3929,13 @@
             ? `${srcTypeClean} - ${srcEqClean}`
             : (srcEqClean || srcTypeClean);
 
-          const isFugitive = (src.category && (src.category.includes('rò rỉ') || src.category.includes('thất thoát'))) ||
-                             (src.type && (src.type.toLowerCase().includes('chiller') || src.type.toLowerCase().includes('chữa cháy') || src.type.toLowerCase().includes('pccc'))) ||
-                             Boolean(src.refrigerant);
-          const isWastewater = (src.category && src.category.toLowerCase().includes('nước thải')) ||
-                               (src.type && src.type.toLowerCase().includes('nước thải'));
-
           for (let d = 1; d <= daysInThisMonth; d++) {
             const dateObj = new Date(parseInt(curYear), m - 1, d);
             const dayOfWeek = dateObj.getDay();
 
             if (isFugitive) {
               if (d !== 15 || (m !== 6 && m !== 12)) continue;
-              docStr = 'Kiểm định & bảo trì định kỳ';
+              docStr = 'Bảo dưỡng định kỳ & nạp gas lạnh';
             } else if (isWastewater) {
               if (d !== 28) continue;
               docStr = 'Quan trắc lưu lượng nước thải tháng';

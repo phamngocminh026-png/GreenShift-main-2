@@ -16,7 +16,7 @@ assert(htmlContent.includes('Tải file mẫu (${ind})') || htmlContent.includes
 
 // 2. Verify downloadEquipmentTemplate prioritizes #ci-setup-industry
 assert(htmlContent.includes("document.getElementById('ci-setup-industry')"), 'downloadEquipmentTemplate must check #ci-setup-industry');
-assert(htmlContent.includes('📥 Đang tải file mẫu thiết bị Excel cho ngành:'), 'downloadEquipmentTemplate must show toast with selected industry');
+assert(htmlContent.includes('Đang tải file mẫu thiết bị Excel cho ngành:'), 'downloadEquipmentTemplate must show toast with selected industry');
 
 // 3. Verify equipment import does NOT block non-steel files with smart mapping modal
 assert(!htmlContent.includes('if (!isStandardTemplate)'), 'Must not block import based on isStandardTemplate');

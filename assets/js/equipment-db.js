@@ -2437,19 +2437,255 @@ window.findStandardEquipment = function(nameOrKeyword) {
   ) || null;
 };
 
-window.calcEquipmentHourlyRate = function(capacity, loadFactor) {
+window.calcEquipmentHourlyRate = function(capacity, loadFactor, extra = {}) {
   const cap = parseFloat(capacity) || 0;
   const load = (parseFloat(loadFactor) || 100) / 100;
+  const unit = (typeof extra === 'string' ? extra : (extra.unit || extra.capUnit || extra.opCapUnit || '')).toLowerCase();
+  const fuel = (extra.fuel || extra.energyType || '').toLowerCase();
+  const cat = (extra.category || extra.cat || '').toLowerCase();
+  const type = (extra.type || extra.name || '').toLowerCase();
+
+  const isElectric = (cat.includes('tiêu thụ điện') || fuel.includes('điện lưới') || fuel === 'điện') && !fuel.includes('cách điện') && !fuel.includes('sf6') && !cat.includes('rò rỉ');
+  const isFugitive = !isElectric && (cat.includes('rò rỉ') || cat.includes('thất thoát') || unit.includes('kg nạp') || unit.includes('kg co2') || unit.includes('sf6') || fuel.includes('sf6') || fuel.includes('r-') || fuel.includes('hfc'));
+  if (isFugitive) {
+    return 0;
+  }
+
+  if (unit.includes('/năm')) {
+    const hours = parseFloat(extra.hoursDay || extra.opHoursDay) || 8;
+    const days = parseFloat(extra.daysWeek || extra.opDaysWeek) || 6;
+    const annualDays = Math.min(312, Math.round(days * 52)) || 300;
+    const daily = (cap * load) / annualDays;
+    return Math.round((daily / (hours || 8)) * 1000) / 1000;
+  }
+
+  if (unit.includes('/tháng')) {
+    const hours = parseFloat(extra.hoursDay || extra.opHoursDay) || 8;
+    const days = parseFloat(extra.daysWeek || extra.opDaysWeek) || 6;
+    const annualDays = Math.min(312, Math.round(days * 52)) || 300;
+    const daily = (cap * 12 * load) / annualDays;
+    return Math.round((daily / (hours || 8)) * 1000) / 1000;
+  }
+
+  if (unit.includes('m3/ngày') || cat.includes('nước thải') || fuel.includes('nước thải')) {
+    const daily = cap * load;
+    return Math.round((daily / 24) * 1000) / 1000;
+  }
+
+  if (unit === 'kw' && (fuel.includes('diesel') || fuel.includes('do') || fuel.includes('dầu'))) {
+    // Diesel generator / pump: BSFC ~ 0.25 L/kWh
+    return Math.round(cap * load * 0.25 * 1000) / 1000;
+  }
+
   return Math.round(cap * load * 1000) / 1000;
 };
 
-window.calcEquipmentAnnual = function(capacity, loadFactor, hoursPerDay, daysPerWeek) {
-  const hourly = window.calcEquipmentHourlyRate(capacity, loadFactor);
+window.calcEquipmentAnnual = function(capacity, loadFactor, hoursPerDay, daysPerWeek, extra = {}) {
+  const cap = parseFloat(capacity) || 0;
+  const load = (parseFloat(loadFactor) || 100) / 100;
   const h = parseFloat(hoursPerDay) || 16;
   const d = parseFloat(daysPerWeek) || 6;
+  const unit = (typeof extra === 'string' ? extra : (extra.unit || extra.capUnit || extra.opCapUnit || '')).toLowerCase();
+  const fuel = (extra.fuel || extra.energyType || '').toLowerCase();
+  const cat = (extra.category || extra.cat || '').toLowerCase();
+  const type = (extra.type || extra.name || '').toLowerCase();
+
+  const isElectric = (cat.includes('tiêu thụ điện') || fuel.includes('điện lưới') || fuel === 'điện') && !fuel.includes('cách điện') && !fuel.includes('sf6') && !cat.includes('rò rỉ');
+  const isFugitive = !isElectric && (cat.includes('rò rỉ') || cat.includes('thất thoát') || unit.includes('kg nạp') || unit.includes('kg co2') || unit.includes('sf6') || fuel.includes('sf6') || fuel.includes('r-') || fuel.includes('hfc'));
+
+  if (isFugitive) {
+    let leakRate = 0.03; // Default 3% annual leakage for chillers / AC / commercial refrigeration
+    if (fuel.includes('sf6') || unit.includes('sf6') || type.includes('gis') || type.includes('cắt điện')) {
+      leakRate = 0.005; // 0.5% annual leakage for sealed high-voltage GIS (IPCC 2006 Vol 3 Ch 8 Table 8.2)
+    } else if (type.includes('chữa cháy') || type.includes('pccc') || fuel.includes('hfc-227ea') || fuel.includes('fm200') || fuel.includes('co2')) {
+      leakRate = 0.02; // 2% for clean gas fire suppression
+    } else if (type.includes('reefer') || type.includes('xe tải lạnh')) {
+      leakRate = 0.05; // 5% for transport refrigeration
+    }
+    const annual = Math.round(cap * leakRate * 100) / 100;
+    const daily = Math.round((annual / 365) * 1000) / 1000;
+    return { hourly: 0, daily, annual, qtyUnit: 'kg' };
+  }
+
+  if (unit.includes('/năm')) {
+    const annual = Math.round(cap * load * 100) / 100;
+    const annualDays = Math.min(312, Math.round(d * 52)) || 300;
+    const daily = Math.round((annual / annualDays) * 1000) / 1000;
+    const hourly = Math.round((daily / (h || 8)) * 1000) / 1000;
+    const cleanUnit = unit.replace('/năm', '').trim();
+    return { hourly, daily, annual, qtyUnit: cleanUnit };
+  }
+
+  if (unit.includes('/tháng')) {
+    const annual = Math.round(cap * 12 * load * 100) / 100;
+    const annualDays = Math.min(312, Math.round(d * 52)) || 300;
+    const daily = Math.round((annual / annualDays) * 1000) / 1000;
+    const hourly = Math.round((daily / (h || 8)) * 1000) / 1000;
+    const cleanUnit = unit.replace('/tháng', '').trim();
+    return { hourly, daily, annual, qtyUnit: cleanUnit };
+  }
+
+  if (unit.includes('m3/ngày') || cat.includes('nước thải') || fuel.includes('nước thải')) {
+    const daily = Math.round(cap * load * 1000) / 1000;
+    const annualDays = 300;
+    const annual = Math.round(daily * annualDays * 100) / 100;
+    const hourly = Math.round((daily / 24) * 1000) / 1000;
+    return { hourly, daily, annual, qtyUnit: 'm3' };
+  }
+
+  if (unit === 'kw' && (fuel.includes('diesel') || fuel.includes('do') || fuel.includes('dầu'))) {
+    const hourly = Math.round(cap * load * 0.25 * 1000) / 1000;
+    const daily = Math.round(hourly * h * 1000) / 1000;
+    const annual = Math.round(daily * d * 52 * 100) / 100;
+    return { hourly, daily, annual, qtyUnit: 'lít' };
+  }
+
+  const hourly = window.calcEquipmentHourlyRate(cap, load * 100);
   const daily = Math.round(hourly * h * 1000) / 1000;
   const annual = Math.round(daily * d * 52 * 1000) / 1000;
-  return { hourly, daily, annual };
+  return { hourly, daily, annual, qtyUnit: unit };
+};
+
+window.calcEquipmentStandardMetrics = function(eqOrSrc) {
+  if (!eqOrSrc) return null;
+  const cap = parseFloat(eqOrSrc['Công suất định mức'] !== undefined ? eqOrSrc['Công suất định mức'] : (eqOrSrc.capacity || eqOrSrc.opCapacity || eqOrSrc.ratedCapacity)) || 0;
+  const unit = (eqOrSrc['Đơn vị công suất'] || eqOrSrc.capacityUnit || eqOrSrc.capUnit || eqOrSrc.opCapUnit || 'kW').trim();
+  const fuelRaw = (eqOrSrc['Loại năng lượng sử dụng (Điện / Nhiên liệu đốt)'] || eqOrSrc.fuel || eqOrSrc.energyType || 'Điện lưới Việt Nam').trim();
+  const catRaw = (eqOrSrc['Nguồn phát thải'] || eqOrSrc.category || 'Tiêu thụ điện').trim();
+  const loadRaw = parseFloat(eqOrSrc['Mức tải TB (%)'] !== undefined ? eqOrSrc['Mức tải TB (%)'] : (eqOrSrc.load || eqOrSrc.opLoad || eqOrSrc.defaultLoadFactor * 100)) || 80;
+  const hoursRaw = parseFloat(eqOrSrc['Giờ làm việc bình thường (h/ngày)'] !== undefined ? eqOrSrc['Giờ làm việc bình thường (h/ngày)'] : (eqOrSrc.hoursDay || eqOrSrc.opHoursDay)) || 16;
+  const daysRaw = parseFloat(eqOrSrc['Số ngày chạy/tuần'] !== undefined ? eqOrSrc['Số ngày chạy/tuần'] : (eqOrSrc.daysWeek || eqOrSrc.opDaysWeek)) || 6;
+  const type = (eqOrSrc['Loại thiết bị'] || eqOrSrc.type || '').trim();
+  const name = (eqOrSrc['Tên thiết bị'] || eqOrSrc.name || '').trim();
+  const code = (eqOrSrc['Số tài sản'] || eqOrSrc.asset || eqOrSrc.code || '').trim();
+
+  const isElectric = (catRaw.toLowerCase().includes('tiêu thụ điện') || fuelRaw.toLowerCase().includes('điện lưới') || fuelRaw.toLowerCase() === 'điện') && !fuelRaw.toLowerCase().includes('cách điện') && !fuelRaw.toLowerCase().includes('sf6') && !catRaw.toLowerCase().includes('rò rỉ');
+  const isWastewater = !isElectric && (catRaw.toLowerCase().includes('nước thải') || catRaw.toLowerCase().includes('chất thải') || fuelRaw.toLowerCase().includes('nước thải') || unit.toLowerCase().includes('m3/ngày') || type.toLowerCase().includes('nước thải'));
+  const isFugitive = !isElectric && !isWastewater && (
+    catRaw.toLowerCase().includes('rò rỉ') || 
+    catRaw.toLowerCase().includes('thất thoát') || 
+    unit.toLowerCase().includes('kg nạp') || 
+    unit.toLowerCase().includes('kg co2') || 
+    unit.toLowerCase().includes('sf6') || 
+    fuelRaw.toLowerCase().includes('sf6') || 
+    fuelRaw.toLowerCase().includes('r-') || 
+    fuelRaw.toLowerCase().includes('hfc') || 
+    fuelRaw.toLowerCase().includes('freon') || 
+    fuelRaw.toLowerCase().includes('amoniac') || 
+    fuelRaw.toLowerCase().includes('nh3') ||
+    (type.toLowerCase().includes('chiller') && !fuelRaw.toLowerCase().includes('điện') && !catRaw.toLowerCase().includes('tiêu thụ điện'))
+  );
+
+  const extra = {
+    unit,
+    capUnit: unit,
+    fuel: fuelRaw,
+    category: catRaw,
+    type: type || name,
+    name,
+    code,
+    hoursDay: hoursRaw,
+    daysWeek: daysRaw
+  };
+
+  const ann = window.calcEquipmentAnnual(cap, loadRaw, hoursRaw, daysRaw, extra);
+  const hourlyRate = ann.hourly;
+  const annualEstQty = ann.annual;
+
+  let efFactor = 0.6766;
+  let efUnit = 'kgCO2e/kWh';
+  let fuelLabel = fuelRaw;
+  let qtyUnit = ann.qtyUnit || unit;
+
+  if (isFugitive) {
+    efUnit = 'kgCO2e/kg';
+    qtyUnit = 'kg';
+    if (fuelRaw.toLowerCase().includes('sf6') || unit.toLowerCase().includes('sf6')) {
+      efFactor = 22800;
+      fuelLabel = 'Khí cách điện Sulfur Hexafluoride (SF6)';
+    } else if (fuelRaw.includes('R-410A')) {
+      efFactor = 2088;
+      fuelLabel = 'Môi chất lạnh R-410A';
+    } else if (fuelRaw.includes('R-134a')) {
+      efFactor = 1430;
+      fuelLabel = 'Môi chất lạnh R-134a';
+    } else if (fuelRaw.includes('R-404A')) {
+      efFactor = 3922;
+      fuelLabel = 'Môi chất lạnh R-404A';
+    } else if (fuelRaw.includes('HFC-227ea') || fuelRaw.includes('FM200')) {
+      efFactor = 3220;
+      fuelLabel = 'HFC-227ea (FM-200)';
+    } else if (fuelRaw.includes('CO2')) {
+      efFactor = 1.0;
+      fuelLabel = 'Khí CO2';
+    } else if (fuelRaw.includes('NH3') || fuelRaw.includes('R-717') || fuelRaw.includes('Amoniac')) {
+      efFactor = 0.0;
+      fuelLabel = 'Khí Amoniac (NH3 / R-717)';
+    } else {
+      efFactor = 2088;
+      fuelLabel = fuelRaw || 'Môi chất lạnh R-410A';
+    }
+  } else if (isWastewater) {
+    efFactor = 0.42;
+    efUnit = 'kgCO2e/m3';
+    qtyUnit = 'm3';
+    fuelLabel = 'Nước thải sinh hoạt & phụ trợ';
+  } else if (isElectric) {
+    efFactor = 0.6766;
+    efUnit = 'kgCO2e/kWh';
+    qtyUnit = 'kWh';
+    fuelLabel = 'Điện lưới Việt Nam 2022';
+  } else if (fuelRaw.includes('Diesel') || fuelRaw.includes('DO')) {
+    efFactor = 2.6853;
+    efUnit = 'kgCO2e/lít';
+    qtyUnit = 'lít';
+    fuelLabel = 'Dầu Diesel (DO)';
+  } else if (fuelRaw.includes('FO') || fuelRaw.includes('Fuel Oil')) {
+    efFactor = 3.127;
+    efUnit = 'kgCO2e/kg';
+    qtyUnit = 'kg';
+    fuelLabel = 'Dầu nặng FO (Fuel Oil)';
+  } else if (fuelRaw.includes('Than')) {
+    efFactor = 2.45;
+    efUnit = 'kgCO2e/kg';
+    qtyUnit = 'kg';
+    fuelLabel = 'Than mỡ (Bituminous coal)';
+  } else if (fuelRaw.includes('LPG')) {
+    efFactor = 1.61;
+    efUnit = 'kgCO2e/kg';
+    qtyUnit = 'kg';
+    fuelLabel = 'Khí hóa lỏng (LPG)';
+  } else if (fuelRaw.includes('LNG') || fuelRaw.includes('Khí tự nhiên')) {
+    efFactor = 2.16;
+    efUnit = 'kgCO2e/Nm3';
+    qtyUnit = 'Nm3';
+    fuelLabel = 'Khí tự nhiên (NG / LNG)';
+  } else if (fuelRaw.includes('Biogas') || fuelRaw.includes('sinh học')) {
+    efFactor = 0.05;
+    efUnit = 'kgCO2e/Nm3';
+    qtyUnit = 'Nm3';
+    fuelLabel = 'Khí sinh học (Biogas / CH4)';
+  } else if (fuelRaw.includes('Sinh khối') || fuelRaw.includes('Củi') || fuelRaw.includes('Mùn cưa')) {
+    efFactor = 0.038;
+    efUnit = 'kgCO2e/kg';
+    qtyUnit = 'kg';
+    fuelLabel = 'Sinh khối / Củi vụn / Mùn cưa';
+  }
+
+  const annualEstEmissions = Math.round((annualEstQty * efFactor / 1000) * 100) / 100;
+
+  return {
+    hourlyRate,
+    annualEstQty,
+    annualEstEmissions,
+    efFactor,
+    efUnit,
+    fuelLabel,
+    qtyUnit,
+    isFugitive,
+    isWastewater,
+    isElectric
+  };
 };
 
 // Hàm cung cấp Thương hiệu / Mẫu mã thực tế, chuẩn công nghiệp thay cho mô tả dài

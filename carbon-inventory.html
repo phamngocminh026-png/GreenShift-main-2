@@ -1779,7 +1779,7 @@
               </div>
               <div>
                 <label style="font-size: 0.75rem; font-weight: 600; color: #475569;">Loại sản phẩm đầu ra</label>
-                <input type="text" id="source-proc-product" class="form-control" value="Thép thô / Phôi thép" style="height: 32px; font-size: 0.85rem;">
+                <input type="text" id="source-proc-product" class="form-control" placeholder="Tên sản phẩm đầu ra" style="height: 32px; font-size: 0.85rem;">
               </div>
             </div>
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.6rem; margin-bottom: 0.6rem;">
@@ -3232,7 +3232,10 @@
           const eq       = d.eq || '';
           const ef       = d.ef || '';
           const refrigerant = d.refrigerant || '';
-          const efOrRef  = ef || refrigerant || '—';
+          let efOrRef  = ef || refrigerant || '—';
+          if (ef && ef.startsWith('(Tùy chỉnh') && refrigerant) {
+            efOrRef = refrigerant + ' ' + ef;
+          }
           const createdAt = d.createdAt || '';
 
           const scopeInfo = getScopeInfo(category, ef, type);
@@ -5035,11 +5038,12 @@
           sourceMeasureSelect.value = 'Theo sản lượng sản phẩm';
         }
         const procQtyEl = document.getElementById('source-proc-annual-qty');
+        const ippuDef = getActiveIndustryIppuDefaults();
         if (procQtyEl && !procQtyEl.value) procQtyEl.value = '600000';
         const procProdEl = document.getElementById('source-proc-product');
-        if (procProdEl && !procProdEl.value) procProdEl.value = 'Thép thô / Phôi thép';
+        if (procProdEl && (!procProdEl.value || procProdEl.value === 'Thép thô / Phôi thép')) procProdEl.value = ippuDef.productName;
         const procUnitEl = document.getElementById('source-proc-unit');
-        if (procUnitEl && !procUnitEl.value) procUnitEl.value = 'tấn';
+        if (procUnitEl && !procUnitEl.value) procUnitEl.value = ippuDef.productionUnit || 'tấn';
         const procDaysEl = document.getElementById('source-proc-days-week');
         if (procDaysEl && !procDaysEl.value) procDaysEl.value = '6';
         if (typeof updateSourceMeasureUI === 'function') updateSourceMeasureUI();
@@ -5204,6 +5208,26 @@
       if (sourceAccountantBox) sourceAccountantBox.style.display = (measure === 'Ước tính kế toán tài chính') ? 'block' : 'none';
     }
 
+    function getActiveIndustryIppuDefaults() {
+      if (typeof window.getIndustryIppuDefaults === 'function') {
+        const ind = (typeof window.getCurrentIndustry === 'function') ? window.getCurrentIndustry() : (document.getElementById('ci-setup-industry')?.value || 'Nhôm');
+        return window.getIndustryIppuDefaults(ind);
+      }
+      let ind = 'Nhôm';
+      try {
+        const comp = JSON.parse(localStorage.getItem('gs_v2_company') || '{}');
+        if (comp.industry) ind = comp.industry;
+      } catch(e) {}
+      const iLower = ind.toLowerCase();
+      if (iLower.includes('nhôm') || iLower.includes('alumin')) {
+        return { productName: 'Nhôm nguyên sinh (Điện phân)', efFactor: 1600, productionUnit: 'tấn' };
+      }
+      if (iLower.includes('xi măng') || iLower.includes('cement')) {
+        return { productName: 'Clanhke (Clinker)', efFactor: 525, productionUnit: 'tấn' };
+      }
+      return { productName: 'Thép thô / Phôi thép', efFactor: 60, productionUnit: 'tấn' };
+    }
+
     function recalcSourceProcessEval() {
       const annualQtyInput = document.getElementById('source-proc-annual-qty');
       const daysWeekInput = document.getElementById('source-proc-days-week');
@@ -5223,7 +5247,8 @@
       const dailyQty = activeWorkdays > 0 ? (annualQty / activeWorkdays) : 0;
 
       const efFactorInput = document.getElementById('source-ef-factor');
-      let efVal = parseFloat(efFactorInput && efFactorInput.value ? efFactorInput.value : 60) || 60;
+      const ippuDef = getActiveIndustryIppuDefaults();
+      let efVal = parseFloat(efFactorInput && efFactorInput.value ? efFactorInput.value : ippuDef.efFactor) || ippuDef.efFactor;
       // EF can be in kgCO2e/tonne (e.g. 60) or tCO2/tonne (0.060)
       let efInTonne = (efVal > 5) ? (efVal / 1000) : efVal;
       let annualEmissions = Math.round(annualQty * efInTonne * 100) / 100;
@@ -5591,9 +5616,10 @@
               const procQtyEl = document.getElementById('source-proc-annual-qty');
               if (procQtyEl) procQtyEl.value = row.dataset.annualEstQty || (row.dataset.eq?.includes('EAF') || row.dataset.type?.includes('quang điện') ? '600000' : '500000');
               const procProdEl = document.getElementById('source-proc-product');
-              if (procProdEl) procProdEl.value = row.dataset.productName || 'Thép thô / Phôi thép';
+              const ippuDef = getActiveIndustryIppuDefaults();
+              if (procProdEl) procProdEl.value = row.dataset.productName || ippuDef.productName;
               const procUnitEl = document.getElementById('source-proc-unit');
-              if (procUnitEl) procUnitEl.value = row.dataset.productionUnit || 'tấn';
+              if (procUnitEl) procUnitEl.value = row.dataset.productionUnit || ippuDef.productionUnit || 'tấn';
               const procDaysEl = document.getElementById('source-proc-days-week');
               if (procDaysEl) procDaysEl.value = row.dataset.opDaysWeek || '6';
             } else {
@@ -5745,7 +5771,8 @@
       
       let efOrRef = ef || refrigerant || '—';
       if (customFactor) {
-        efOrRef = ef + ' (Tùy chỉnh: ' + customFactor + ')';
+        const baseName = ef || refrigerant || 'Hệ số';
+        efOrRef = baseName + ' (Tùy chỉnh: ' + customFactor + ')';
       }
       
       const measure   = document.getElementById('source-measure').value || '';
@@ -5790,13 +5817,14 @@
 
       const isProc = isCurrentSourceProcessEmission();
       const procAnnualQty = document.getElementById('source-proc-annual-qty') ? parseFloat(document.getElementById('source-proc-annual-qty').value) || 0 : 0;
-      const procProduct = document.getElementById('source-proc-product') ? document.getElementById('source-proc-product').value : 'Thép thô / Phôi thép';
-      const procUnit = document.getElementById('source-proc-unit') ? document.getElementById('source-proc-unit').value : 'tấn';
+      const ippuDef = getActiveIndustryIppuDefaults();
+      const procProduct = (document.getElementById('source-proc-product') && document.getElementById('source-proc-product').value) ? document.getElementById('source-proc-product').value : ippuDef.productName;
+      const procUnit = (document.getElementById('source-proc-unit') && document.getElementById('source-proc-unit').value) ? document.getElementById('source-proc-unit').value : (ippuDef.productionUnit || 'tấn');
       const procDaysWeek = document.getElementById('source-proc-days-week') ? document.getElementById('source-proc-days-week').value : '6';
 
       if (isProc && (measure === 'Theo sản lượng sản phẩm' || measure === 'Tự đánh giá')) {
         annualEstQty = procAnnualQty;
-        const efNum = parseFloat(customFactor) || 60;
+        const efNum = parseFloat(customFactor) || ippuDef.efFactor;
         const efInT = (efNum > 5) ? (efNum / 1000) : efNum;
         annualEstEmissions = Math.round(annualEstQty * efInT * 100) / 100;
       } else if (measure === 'Tự đánh giá' && opCapacity) {

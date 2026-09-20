@@ -911,9 +911,36 @@
 
           document.getElementById('no-activity-row')?.remove();
           data.forEach(act => {
-            const isElectricalSource = (act.sourceType && act.sourceType.includes('Tiêu thụ điện')) ||
+            const isExplicitProc = act.isProcessEmission === 'true' || 
+                                   ((act.category && (act.category.includes('công nghiệp') || act.category.includes('công nghệ') || act.category.includes('ippu') || act.category.includes('Loại 1'))) &&
+                                   (act.sourceType && (act.sourceType.includes('quá trình') || act.sourceType.includes('công nghệ') || act.sourceType.includes('điện phân nhôm nóng chảy')))) ||
+                                   (act.sourceName && act.sourceName.toLowerCase().includes('bể điện phân nhôm nóng chảy')) ||
+                                   (act.doc && act.doc.includes('Định mức công nghệ'));
+
+            const isElectricalSource = !isExplicitProc && (
+                                       (act.sourceType && act.sourceType.includes('Tiêu thụ điện')) ||
                                        (act.category && act.category.includes('Loại 2')) ||
-                                       (act.sourceName && (act.sourceName.includes('bể điện phân') || act.sourceName.includes('nắn dòng') || act.sourceName.includes('máy nén khí') || act.sourceName.includes('chiếu sáng')));
+                                       (act.sourceName && (act.sourceName.includes('nắn dòng') || act.sourceName.includes('máy nén khí') || act.sourceName.includes('chiếu sáng') || (act.sourceName.includes('bể điện phân') && !act.sourceName.toLowerCase().includes('nóng chảy'))))
+            );
+
+            // Tự động bảo vệ & sửa chữa nguồn công nghệ IPPU (Đặc thù Ngành Nhôm: Điện phân Hall-Héroult)
+            const curInd = getCurrentIndustry();
+            const indIppu = getIndustryIppuDefaults(curInd);
+            const isAluminum = curInd.toLowerCase().includes('nhôm') || curInd.toLowerCase().includes('alumin');
+            const isAluPotlineIppu = isExplicitProc && (isAluminum || (act.sourceName && act.sourceName.toLowerCase().includes('nhôm')));
+
+            if (isAluPotlineIppu) {
+              act.unit = 'tấn';
+              act.category = 'Các quá trình công nghiệp';
+              act.sourceType = 'Điện phân nhôm nóng chảy (Hall-Héroult)';
+              act.efName = 'Nhôm nguyên sinh (Điện phân)';
+              const rawEf = parseFloat(act.finalFactor);
+              if (isNaN(rawEf) || rawEf < 10 || rawEf === 0.6766 || rawEf === 60) {
+                act.finalFactor = '1600';
+                act.co2e = (parseFloat(act.amount || 0) * 1600).toFixed(2);
+                needsSave = true;
+              }
+            }
 
             // Sửa chữa nếu thiết bị điện lưới bị lưu nhầm thành tấn hoặc bị biến thành Quá trình luyện thép
             if (isElectricalSource && (act.unit === 'tấn' || act.unit === 'tan' || (act.finalFactor == 60 && act.sourceName && act.sourceName.includes('luyện thép')))) {
@@ -939,6 +966,11 @@
                 act.efName = 'Điện lưới Việt Nam';
                 act.finalFactor = '0.6766';
                 act.co2e = (parseFloat(act.amount || 0) * 0.6766).toFixed(2);
+              } else if (isAluPotlineIppu) {
+                act.finalFactor = '1600';
+                act.efName = 'Nhôm nguyên sinh (Điện phân)';
+                act.sourceType = 'Điện phân nhôm nóng chảy (Hall-Héroult)';
+                act.co2e = (parseFloat(act.amount || 0) * 1600).toFixed(2);
               } else {
                 act.finalFactor = '60';
                 act.efName = 'Thép lò hồ quang điện (EAF)';
@@ -950,11 +982,11 @@
             }
 
             // Tự động sửa chữa đơn vị cho các dòng quá trình công nghiệp IPPU nếu bị lưu nhầm thành kWh
-            const isProcAct = !isElectricalSource && (
-                              (act.sourceType && (act.sourceType.includes('thổi oxy') || act.sourceType.includes('clanhke') || (act.sourceType.includes('luyện thép') && !act.sourceType.includes('Tiêu thụ điện')))) ||
+            const isProcAct = isExplicitProc || (!isElectricalSource && (
+                              (act.sourceType && (act.sourceType.includes('thổi oxy') || act.sourceType.includes('clanhke') || act.sourceType.includes('điện phân') || (act.sourceType.includes('luyện thép') && !act.sourceType.includes('Tiêu thụ điện')))) ||
                               (act.sourceName && (act.sourceName.includes('thổi oxy') || (act.sourceName.includes('luyện thép') && !act.sourceName.includes('Tiêu thụ điện')))) ||
                               act.isProcessEmission === 'true' ||
-                              (act.finalFactor == 60 || act.finalFactor == '60' || act.finalFactor == 1600 || act.finalFactor == '1600'));
+                              (act.finalFactor == 60 || act.finalFactor == '60' || act.finalFactor == 1600 || act.finalFactor == '1600')));
             if (isProcAct && (act.unit === 'kWh' || act.unit === 'kw' || !act.unit)) {
               act.unit = 'tấn';
               needsSave = true;
@@ -966,11 +998,11 @@
               });
               act.doc = act.doc.replace(/\(\s*8\s*-\s*9\s*\)\s*\(\s*8:00\s*-\s*9:00\s*\)/g, '(08:00 - 09:00)');
             }
-            const isActProc = !isElectricalSource && (
+            const isActProc = isExplicitProc || (!isElectricalSource && (
                               act.isProcessEmission === 'true' || 
                               (act.category && (act.category.includes('công nghiệp') || act.category.includes('ippu'))) ||
                               (act.sourceType && (act.sourceType.includes('quá trình') || act.sourceType.includes('thổi oxy') || act.sourceType.includes('luyện thép') || act.sourceType.includes('clanhke') || act.sourceType.includes('ippu'))) ||
-                              (act.sourceName && (act.sourceName.includes('thép') || act.sourceName.includes('quá trình') || act.sourceName.includes('thổi oxy') || act.sourceName.includes('clanhke') || act.sourceName.includes('luyện kim'))));
+                              (act.sourceName && (act.sourceName.includes('thép') || act.sourceName.includes('quá trình') || act.sourceName.includes('thổi oxy') || act.sourceName.includes('clanhke') || act.sourceName.includes('luyện kim')))));
             if (isActProc && (act.unit === 'kWh' || act.unit === 'kw' || !act.unit)) {
               act.unit = 'tấn';
             } else if (act.unit) {
@@ -988,7 +1020,11 @@
                 const srcId = src.id;
                 const srcName = (src.eq || src.type || '').toLowerCase();
                 const targetDaily = Math.round((aQty / 300) * 1000) / 1000;
-                const efNum = parseFloat(src.efFactor) || 60;
+                const indIppu = getIndustryIppuDefaults(getCurrentIndustry());
+                let efNum = parseFloat(src.efFactor);
+                if (isNaN(efNum) || efNum < 10 || efNum === 0.6766) {
+                  efNum = indIppu.efFactor;
+                }
                 const efUnit = (src.efUnit || src.opCapUnit || '').toLowerCase();
                 const efKg = (efUnit.includes('tco2') || efUnit.includes('tấn co2') || efUnit.includes('t co2')) ? (efNum * 1000) : efNum;
 
@@ -996,10 +1032,11 @@
                   const isMatch = (srcId && a.sourceId === srcId) || (srcName && a.sourceName && a.sourceName.toLowerCase().includes(srcName));
                   if (isMatch && a.isBaseline === 'true') {
                     const curAmt = parseFloat(a.amount) || 0;
-                    if (Math.abs(curAmt - targetDaily) > 2) {
+                    if (Math.abs(curAmt - targetDaily) > 2 || a.unit !== (src.productionUnit || 'tấn') || parseFloat(a.finalFactor) !== efKg) {
                       a.amount = targetDaily;
+                      a.unit = src.productionUnit || 'tấn';
                       a.co2e = (targetDaily * efKg).toFixed(2);
-                      a.finalFactor = efKg;
+                      a.finalFactor = efKg.toString();
                       a.doc = `Định mức công nghệ (${targetDaily} ${src.productionUnit || 'tấn'}/ngày)`;
                       needsSave = true;
                     }
@@ -1829,16 +1866,25 @@
       const sName = (sourceName || '').toLowerCase();
       const u = (unitStr || '').toLowerCase().trim();
 
-      // 1. Tuyệt đối bảo toàn đơn vị điện năng kWh cho thiết bị tiêu thụ điện (kể cả bể điện phân nhôm, trạm nắn dòng)
+      // 1. Nhận diện Quá trình công nghiệp (Scope 1 - IPPU) trước
+      const isProc = cat.includes('quá trình') || cat.includes('công nghiệp') || cat.includes('ippu') ||
+                     sType.includes('quá trình') || sType.includes('thổi oxy') || sType.includes('luyện thép') || sType.includes('clanhke') || sType.includes('điện phân nhôm nóng chảy') ||
+                     ((sName.includes('bể điện phân nhôm nóng chảy') || sName.includes('quá trình') || sName.includes('ippu')) && !cat.includes('loại 2') && !sType.includes('tiêu thụ điện'));
+
+      if (isProc) {
+        if (u.includes('tấn') || u.includes('tan') || u === 't' || u.includes('t/')) return 'tấn';
+        if (u.includes('đôi')) return 'đôi';
+        if (u.includes('mét') || u.includes('met') || u === 'm') return 'mét';
+        if (u.includes('kg')) return 'kg';
+        // Đối với nguồn công nghệ, nếu bị lưu nhầm kWh hay kW thì chuẩn hóa về 'tấn'
+        return 'tấn';
+      }
+
+      // 2. Tuyệt đối bảo toàn đơn vị điện năng kWh cho thiết bị tiêu thụ điện (kể cả bể điện phân nhôm, trạm nắn dòng)
       const isElectricity = cat.includes('loại 2') || cat.includes('tiêu thụ điện') || cat.includes('điện mua vào') ||
                             sType.includes('tiêu thụ điện') || sType.includes('điện lưới') || sType.includes('điện mua') ||
                             u.includes('kwh') || u.includes('kw.h') || u === 'kw' || u === 'kwh';
       if (isElectricity) return 'kWh';
-
-      // 2. Nhận diện Quá trình công nghiệp (Scope 1 - IPPU)
-      const isProc = cat.includes('quá trình') || cat.includes('công nghiệp') || cat.includes('ippu') ||
-                     sType.includes('quá trình') || sType.includes('thổi oxy') || sType.includes('luyện thép') || sType.includes('clanhke') ||
-                     ((sName.includes('quá trình') || sName.includes('ippu')) && !isElectricity);
       
       if (!unitStr) {
         if (isProc) return 'tấn';
@@ -2671,8 +2717,8 @@
         docFileHTML = '<span style="color: #94a3b8;">—</span>';
       }
 
-      // Chuẩn hóa đơn vị tiêu thụ (kWh hoặc lít thay vì kW hay lít/h)
-      const normalizedUnit = normalizeConsumptionUnit(data.unit, data.sourceType);
+      // Chuẩn hóa đơn vị tiêu thụ (kWh hoặc lít thay vì kW hay lít/h, tấn cho IPPU)
+      const normalizedUnit = normalizeConsumptionUnit(data.unit, data.sourceType, data.sourceName, data.category);
 
       // Bảo vệ phân quyền dữ liệu giữa Kế toán và Kỹ sư (Kiểm tra động theo vai trò hiện thời)
       function getEditPermission() {
@@ -4148,7 +4194,17 @@
             docStr = `Vận hành ca ngày (${hDay}h/ngày)`;
           }
 
-          const efFactor = parseFloat(src.efFactor) || 0.6766;
+          const indIppu = (typeof getIndustryIppuDefaults === 'function') ? getIndustryIppuDefaults(getCurrentIndustry()) : { efFactor: 1600 };
+          let efFactor = parseFloat(src.efFactor);
+          if (isProc) {
+            if (isNaN(efFactor) || efFactor < 10 || efFactor === 0.6766) {
+              efFactor = indIppu.efFactor;
+            }
+          } else {
+            if (isNaN(efFactor) || efFactor <= 0) {
+              efFactor = 0.6766;
+            }
+          }
           let dailyCo2e = (dailyQty * efFactor).toFixed(2);
 
           let isBiomassSrc = (src.biomass === 'Có' || src.biomass === 'true');
@@ -4340,7 +4396,8 @@
       const dWeek = parseFloat(src.opDaysWeek) || 6;
       const hDay = parseFloat(src.opHoursDay) || 8;
       const rawEf = parseFloat(src.efFactor);
-      let efFactor = (!isNaN(rawEf) && rawEf > 0) ? rawEf : (isProc ? 60 : 0.6766);
+      const indIppu = (typeof getIndustryIppuDefaults === 'function') ? getIndustryIppuDefaults(getCurrentIndustry()) : { efFactor: 1600 };
+      let efFactor = (!isNaN(rawEf) && rawEf > 10 && rawEf !== 0.6766) ? rawEf : (isProc ? indIppu.efFactor : 0.6766);
       if (isProc && efFactor > 0 && efFactor <= 5) efFactor = efFactor * 1000;
       const annualQty = parseFloat(src.annualEstQty) || 0;
 

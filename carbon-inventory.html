@@ -5046,6 +5046,9 @@
         if (procUnitEl && !procUnitEl.value) procUnitEl.value = ippuDef.productionUnit || 'tấn';
         const procDaysEl = document.getElementById('source-proc-days-week');
         if (procDaysEl && !procDaysEl.value) procDaysEl.value = '6';
+        if (document.getElementById('source-ef')) document.getElementById('source-ef').value = ippuDef.productName;
+        if (document.getElementById('source-ef-factor')) document.getElementById('source-ef-factor').value = ippuDef.efFactor.toString();
+        if (document.getElementById('source-ef-unit')) document.getElementById('source-ef-unit').value = `kgCO2e/${ippuDef.productionUnit || 'tấn'}`;
         if (typeof updateSourceMeasureUI === 'function') updateSourceMeasureUI();
         if (typeof recalcSourceProcessEval === 'function') recalcSourceProcessEval();
       }
@@ -5248,8 +5251,12 @@
 
       const efFactorInput = document.getElementById('source-ef-factor');
       const ippuDef = getActiveIndustryIppuDefaults();
-      let efVal = parseFloat(efFactorInput && efFactorInput.value ? efFactorInput.value : ippuDef.efFactor) || ippuDef.efFactor;
-      // EF can be in kgCO2e/tonne (e.g. 60) or tCO2/tonne (0.060)
+      let rawEf = parseFloat(efFactorInput && efFactorInput.value ? efFactorInput.value : ippuDef.efFactor);
+      let efVal = (!isNaN(rawEf) && rawEf > 10 && rawEf !== 0.6766) ? rawEf : ippuDef.efFactor;
+      if (efFactorInput && (efFactorInput.value === '0.6766' || !efFactorInput.value || parseFloat(efFactorInput.value) < 10)) {
+        efFactorInput.value = ippuDef.efFactor.toString();
+      }
+      // EF can be in kgCO2e/tonne (e.g. 1600, 60) or tCO2/tonne (1.60, 0.060)
       let efInTonne = (efVal > 5) ? (efVal / 1000) : efVal;
       let annualEmissions = Math.round(annualQty * efInTonne * 100) / 100;
 
@@ -5622,6 +5629,15 @@
               if (procUnitEl) procUnitEl.value = row.dataset.productionUnit || ippuDef.productionUnit || 'tấn';
               const procDaysEl = document.getElementById('source-proc-days-week');
               if (procDaysEl) procDaysEl.value = row.dataset.opDaysWeek || '6';
+
+              let rowEf = parseFloat(row.dataset.efFactor);
+              if (isNaN(rowEf) || rowEf < 10 || rowEf === 0.6766) {
+                rowEf = ippuDef.efFactor;
+                row.dataset.efFactor = rowEf.toString();
+              }
+              if (document.getElementById('source-ef-factor')) document.getElementById('source-ef-factor').value = rowEf.toString();
+              if (document.getElementById('source-ef')) document.getElementById('source-ef').value = row.dataset.productName || ippuDef.productName;
+              if (document.getElementById('source-ef-unit')) document.getElementById('source-ef-unit').value = `kgCO2e/${ippuDef.productionUnit || 'tấn'}`;
             } else {
               // Smart mapping for measure
               let mVal = row.dataset.measure || '';
@@ -5770,7 +5786,9 @@
       const refrigerant = document.getElementById('source-refrigerant').value || '';
       
       let efOrRef = ef || refrigerant || '—';
-      if (customFactor) {
+      if (isProc) {
+        efOrRef = `${procProduct} (Tùy chỉnh: ${customFactor || ippuDef.efFactor})`;
+      } else if (customFactor) {
         const baseName = ef || refrigerant || 'Hệ số';
         efOrRef = baseName + ' (Tùy chỉnh: ' + customFactor + ')';
       }
@@ -5824,9 +5842,13 @@
 
       if (isProc && (measure === 'Theo sản lượng sản phẩm' || measure === 'Tự đánh giá')) {
         annualEstQty = procAnnualQty;
-        const efNum = parseFloat(customFactor) || ippuDef.efFactor;
+        let efNum = parseFloat(customFactor);
+        if (isNaN(efNum) || efNum < 10 || efNum === 0.6766) {
+          efNum = ippuDef.efFactor;
+        }
         const efInT = (efNum > 5) ? (efNum / 1000) : efNum;
         annualEstEmissions = Math.round(annualEstQty * efInT * 100) / 100;
+        customFactor = efNum.toString();
       } else if (measure === 'Tự đánh giá' && opCapacity) {
         const totalOpCap = (parseFloat(opCapacity) || 0) * opQuantity;
         const isFugitiveSrc = (currentSourceCategory.includes('rò rỉ') || currentSourceCategory.includes('thất thoát') || (refrigerant && refrigerant !== '') || fuel.includes('R-') || type.toLowerCase().includes('chiller'));

@@ -1248,7 +1248,7 @@
                 <button type="button" id="btn-download-act-invoice-template" class="btn btn-secondary" style="display: none; background: #ffffff; color: var(--color-text-primary); border: 1px solid var(--color-border); font-size: 0.82rem; font-weight: 500; padding: 0.42rem 0.85rem; border-radius: 6px; cursor: pointer; white-space: nowrap;" title="Tải file Excel mẫu Bảng kê hóa đơn năng lượng cho Kế toán">Tải file mẫu HĐ</button>
                 <input type="file" id="input-act-invoice-file" accept=".xlsx, .xls, .csv" style="display: none;">
                 <button type="button" id="btn-import-act-invoices" class="btn btn-outline" style="display: none; background: #ffffff; color: var(--color-primary); border: 1px solid var(--color-primary); font-size: 0.82rem; font-weight: 600; padding: 0.42rem 0.85rem; border-radius: 6px; cursor: pointer; white-space: nowrap;" title="Nhập danh sách hóa đơn từ file Excel bảng kê">Tải Bảng kê HĐ</button>
-                <button type="button" id="btn-quick-log-production" onclick="if(typeof window.triggerQuickProductionInput==='function') window.triggerQuickProductionInput();" class="btn btn-secondary" style="font-size: 0.82rem; font-weight: 600; padding: 0.42rem 0.95rem; background: #fff7ed; color: #c2410c; border: 1px solid #fdba74; white-space: nowrap;" title="Ghi nhận nhanh sản lượng phôi thép / sản phẩm ca ngày hôm nay">Chốt sản lượng theo ngày</button>
+                <button type="button" id="btn-quick-log-production" onclick="if(typeof window.triggerQuickProductionInput==='function') window.triggerQuickProductionInput();" class="btn btn-secondary" style="font-size: 0.82rem; font-weight: 600; padding: 0.42rem 0.95rem; background: #fff7ed; color: #c2410c; border: 1px solid #fdba74; white-space: nowrap;" title="Ghi nhận nhanh sản lượng sản phẩm ca ngày hôm nay">Chốt sản lượng theo ngày</button>
                 <button type="button" id="btn-reset-test-data" class="btn btn-secondary" style="font-size: 0.78rem; padding: 0.38rem 0.75rem; background: #fff1f2; color: #be123c; border: 1px solid #fecdd3; white-space: nowrap;" title="Xóa dữ liệu hoạt động, thiết bị và nguồn phát thải đã lưu để kiểm thử lại từ đầu">Đặt lại dữ liệu</button>
                 <button id="btn-add-activity" class="btn btn-primary" onclick="if(typeof window.openActivityModal==='function') window.openActivityModal();" style="font-size: 0.82rem; font-weight: 600; padding: 0.42rem 1.1rem; white-space: nowrap; box-shadow: 0 1px 2px rgba(0,0,0,0.1);">+ Thêm Dữ liệu hoạt động</button>
               </div>
@@ -1684,12 +1684,15 @@
           <label>Nhiên liệu <span style="color: red;">*</span></label>
           <select id="source-fuel" class="form-control" required>
             <option value="" disabled selected>Vui lòng chọn Nhiên liệu</option>
+            <option value="Khí tự nhiên thương phẩm (Gas)">Khí tự nhiên thương phẩm (Gas / NG)</option>
+            <option value="Khí tự nhiên (CNG/LNG)">Khí tự nhiên hóa lỏng / nén (CNG/LNG)</option>
+            <option value="Khí dầu mỏ hóa lỏng (LPG)">Khí dầu mỏ hóa lỏng (LPG / Gas bình)</option>
             <option value="Dầu Diesel (DO)">Dầu Diesel (DO)</option>
             <option value="Dầu Mazut (FO)">Dầu Mazut (FO)</option>
+            <option value="Xăng thương phẩm (Gasoline)">Xăng thương phẩm (Gasoline / RON95 / E5)</option>
             <option value="Xăng">Xăng</option>
-            <option value="Khí tự nhiên (CNG/LNG)">Khí tự nhiên (CNG/LNG)</option>
-            <option value="Than đá">Than đá</option>
-            <option value="Sinh khối (Trấu/Mùn cưa)">Sinh khối (Trấu/Mùn cưa)</option>
+            <option value="Than đá">Than đá (Than Antraxit / Than cốc / Á bitum)</option>
+            <option value="Sinh khối (Trấu/Mùn cưa)">Sinh khối (Trấu / Mùn cưa / Bã mía / Củi vụn)</option>
           </select>
         </div>
         <div class="form-group">
@@ -2641,12 +2644,17 @@
     // --- FUEL AUTO-SUGGEST EMISSION FACTOR ---
     // Mapping: fuel dropdown value → EF_MASTER key (tab, category, id)
     const FUEL_EF_MAP = {
-      'Dầu Diesel (DO)':            { tab: 'VN', cat: 'fuels', id: 'diesel' },
-      'Dầu Mazut (FO)':             { tab: 'VN', cat: 'fuels', id: 'fuel_oil' },
-      'Xăng':                       { tab: 'VN', cat: 'fuels', id: 'petrol' },
-      'Khí tự nhiên (CNG/LNG)':     { tab: 'VN', cat: 'fuels', id: 'natural_gas' },
-      'Than đá':                    { tab: 'VN', cat: 'fuels', id: 'coal_anthracite' },
-      'Sinh khối (Trấu/Mùn cưa)':  { tab: 'VN', cat: 'fuels', id: 'biomass_wood' }
+      'Dầu Diesel (DO)':                     { tab: 'VN', cat: 'fuels', id: 'diesel' },
+      'Dầu Mazut (FO)':                      { tab: 'VN', cat: 'fuels', id: 'fuel_oil' },
+      'Xăng':                                { tab: 'VN', cat: 'fuels', id: 'petrol' },
+      'Xăng thương phẩm (Gasoline)':         { tab: 'VN', cat: 'fuels', id: 'petrol' },
+      'Khí tự nhiên (CNG/LNG)':              { tab: 'VN', cat: 'fuels', id: 'natural_gas' },
+      'Khí tự nhiên thương phẩm (Gas)':      { tab: 'VN', cat: 'fuels', id: 'natural_gas' },
+      'Khí dầu mỏ hóa lỏng (LPG)':           { tab: 'VN', cat: 'fuels', id: 'lpg' },
+      'Than đá':                             { tab: 'VN', cat: 'fuels', id: 'coal_anthracite' },
+      'Than Antraxit (Việt Nam)':            { tab: 'VN', cat: 'fuels', id: 'coal_anthracite' },
+      'Sinh khối (Trấu/Mùn cưa)':           { tab: 'VN', cat: 'fuels', id: 'biomass_wood' },
+      'Sinh khối (Trấu/Mùn cưa/Bã mía)':    { tab: 'VN', cat: 'fuels', id: 'biomass_wood' }
     };
 
     document.getElementById('source-fuel').addEventListener('change', function() {
@@ -4803,20 +4811,28 @@
         matDiv.style.display = (scopeInfo && scopeInfo.scope === 3) ? 'block' : 'none';
       }
 
-      if (category === 'Đốt cháy cố định' || category === 'Đốt cháy động' || category === 'Đốt cháy di động') {
+      const catLower = (category || '').toLowerCase();
+      const isCombustion = (catLower.includes('đốt cháy') || category === 'Đốt cháy cố định' || category === 'Đốt cháy động' || category === 'Đốt cháy di động');
+      const isFugitive = (catLower.includes('thất thoát') || catLower.includes('rò rỉ') || category === 'Phát thải thất thoát' || category === 'Phát thải rò rỉ');
+      const isProcess = (catLower.includes('quá trình công nghiệp') || category === 'Các quá trình công nghiệp');
+
+      if (isCombustion) {
         // Combustion → show Nhiên liệu + Sinh khối + Hệ số phát thải
         fuelGroup.style.display = 'block';
         biomassGroup.style.display = 'block';
         document.getElementById('source-fuel').required = true;
-      } else if (category === 'Phát thải thất thoát') {
-        // Fugitive emissions → show Khí nạp, hide Hệ số phát thải
+      } else if (isFugitive) {
+        // Fugitive emissions → show Khí nạp, hide Hệ số phát thải & Nhiên liệu
         refrigerantGroup.style.display = 'block';
-        // refrigerantSelect.required = true;
+        fuelGroup.style.display = 'none';
+        document.getElementById('source-fuel').required = false;
         efGroup.style.display = 'none';
         efInput.required = false;
         efInput.value = '';
-      } else if (category === 'Các quá trình công nghiệp') {
+      } else if (isProcess) {
         // Quá trình công nghiệp (Scope 1 - IPPU): Tự động chọn phương thức đo lường theo sản lượng và mở khung định mức
+        fuelGroup.style.display = 'none';
+        document.getElementById('source-fuel').required = false;
         if (matDiv) matDiv.style.display = 'none';
         if (sourceMeasureSelect) {
           sourceMeasureSelect.value = 'Theo sản lượng sản phẩm';
@@ -5229,10 +5245,87 @@
           // Trigger type change for EF auto-suggest
           tsEl.dispatchEvent(new Event('change'));
           setTimeout(() => {
-            document.getElementById('source-ef').value = row.dataset.ef || '';
-            document.getElementById('source-refrigerant').value = row.dataset.refrigerant || '';
+            const catLower = (currentSourceCategory || '').toLowerCase();
+            const isCombustion = (catLower.includes('đốt cháy') || currentSourceCategory === 'Đốt cháy cố định' || currentSourceCategory === 'Đốt cháy động' || currentSourceCategory === 'Đốt cháy di động');
+            const isFugitive = (catLower.includes('thất thoát') || catLower.includes('rò rỉ') || currentSourceCategory === 'Phát thải thất thoát' || currentSourceCategory === 'Phát thải rò rỉ');
+            const isProc = (row.dataset.isProcessEmission === 'true' || currentSourceCategory === 'Các quá trình công nghiệp' || catLower.includes('quá trình công nghiệp'));
+            const isElecOrRef = (currentSourceCategory === 'Tiêu thụ điện' || isFugitive || isProc || (row.dataset.type || '').toLowerCase().includes('điện'));
 
-            const isProc = (row.dataset.isProcessEmission === 'true' || currentSourceCategory === 'Các quá trình công nghiệp');
+            const refHidden = document.getElementById('source-refrigerant');
+            const refGroup = document.getElementById('source-refrigerant-group');
+            const efInput = document.getElementById('source-ef');
+            const efGroup = efInput ? efInput.closest('.form-group') : null;
+
+            if (isFugitive) {
+              if (refGroup) refGroup.style.display = 'block';
+              if (efGroup) efGroup.style.display = 'none';
+              if (efInput) { efInput.required = false; efInput.value = ''; }
+              const refVal = row.dataset.refrigerant || row.dataset.ef || 'R-410A';
+              if (refHidden) refHidden.value = refVal;
+              const refDisplay = document.getElementById('ref-picker-display');
+              if (refDisplay && refVal) {
+                refDisplay.textContent = refVal;
+                refDisplay.classList.remove('placeholder');
+              }
+            } else {
+              if (refGroup) refGroup.style.display = 'none';
+              if (efGroup) efGroup.style.display = 'block';
+              if (efInput) {
+                efInput.required = true;
+                efInput.value = row.dataset.ef || '';
+              }
+              if (refHidden) refHidden.value = row.dataset.refrigerant || '';
+            }
+
+            // Xử lý chọn đúng Nhiên liệu cho nguồn Đốt cháy
+            const fuelEl = document.getElementById('source-fuel');
+            if (fuelEl) {
+              const fuelGroup = fuelEl.closest('.form-group');
+              if (isCombustion && !isElecOrRef) {
+                fuelEl.required = true;
+                if (fuelGroup) fuelGroup.style.display = 'block';
+                const candidate = (row.dataset.fuel || row.dataset.ef || '').trim();
+                let matchedFuel = '';
+                if (candidate) {
+                  const candLower = candidate.toLowerCase();
+                  for (let i = 0; i < fuelEl.options.length; i++) {
+                    const optVal = fuelEl.options[i].value;
+                    if (optVal && (optVal === candidate || optVal.toLowerCase() === candLower)) {
+                      matchedFuel = optVal;
+                      break;
+                    }
+                  }
+                  if (!matchedFuel) {
+                    if (candLower.includes('khí tự nhiên') || candLower.includes('gas') || candLower.includes('natural') || candLower.includes('cng') || candLower.includes('lng')) {
+                      matchedFuel = 'Khí tự nhiên thương phẩm (Gas)';
+                    } else if (candLower.includes('lpg') || candLower.includes('hóa lỏng')) {
+                      matchedFuel = 'Khí dầu mỏ hóa lỏng (LPG)';
+                    } else if (candLower.includes('diesel') || candLower.includes(' do')) {
+                      matchedFuel = 'Dầu Diesel (DO)';
+                    } else if (candLower.includes('mazut') || candLower.includes(' fo')) {
+                      matchedFuel = 'Dầu Mazut (FO)';
+                    } else if (candLower.includes('xăng') || candLower.includes('gasoline') || candLower.includes('petrol')) {
+                      matchedFuel = 'Xăng thương phẩm (Gasoline)';
+                    } else if (candLower.includes('than')) {
+                      matchedFuel = 'Than đá';
+                    } else if (candLower.includes('sinh khối') || candLower.includes('trấu') || candLower.includes('mùn cưa') || candLower.includes('củi')) {
+                      matchedFuel = 'Sinh khối (Trấu/Mùn cưa)';
+                    }
+                  }
+                }
+                if (matchedFuel) {
+                  fuelEl.value = matchedFuel;
+                } else if (candidate && candidate !== '—') {
+                  const newOpt = new Option(candidate, candidate, true, true);
+                  fuelEl.add(newOpt);
+                  fuelEl.value = candidate;
+                }
+              } else {
+                fuelEl.required = false;
+                if (fuelGroup) fuelGroup.style.display = 'none';
+              }
+            }
+
             if (isProc) {
               if (matDiv) matDiv.style.display = 'none';
               const defaultMeasure = row.dataset.measure || 'Theo sản lượng sản phẩm';
@@ -5251,14 +5344,14 @@
               const mLower = mVal.toLowerCase();
               if (!mVal || mLower.includes('ước tính') || mLower.includes('tự đánh giá') || mLower.includes('kỹ thuật') || mLower.includes('công suất')) {
                 mVal = 'Tự đánh giá';
-              } else if (mLower.includes('liên tục') || mLower.includes('đồng hồ') || mLower.includes('công tơ')) {
-                mVal = 'Đo liên tục';
               } else if (mLower.includes('sản phẩm') || mLower.includes('sản lượng')) {
                 mVal = 'Theo sản lượng sản phẩm';
               } else if (mLower.includes('kế toán') || mLower.includes('hóa đơn')) {
                 mVal = 'Ước tính kế toán tài chính';
               } else if (mLower.includes('định kỳ')) {
                 mVal = 'Đo định kỳ (không liên tục)';
+              } else if (row.dataset.meterId && row.dataset.meterId.trim() !== '' && (mLower.includes('liên tục') || mLower.includes('đồng hồ') || mLower.includes('công tơ'))) {
+                mVal = 'Đo liên tục';
               } else {
                 mVal = 'Tự đánh giá';
               }
@@ -5291,19 +5384,6 @@
             document.getElementById('source-biomass').value = row.dataset.biomass || 'Không';
             document.getElementById('source-start-date').value = row.dataset.startDate || '2026-01-01';
             
-            // Nhiên liệu chỉ bắt buộc đối với Đốt cháy, không bắt buộc đối với Tiêu thụ điện và Phát thải rò rỉ
-            const isElecOrRef = (currentSourceCategory === 'Tiêu thụ điện' || currentSourceCategory === 'Phát thải thất thoát' || (row.dataset.type || '').toLowerCase().includes('điện'));
-            const fuelEl = document.getElementById('source-fuel');
-            if (fuelEl) {
-              const fuelGroup = fuelEl.closest('.form-group');
-              if (isElecOrRef) {
-                fuelEl.required = false;
-                if (fuelGroup) fuelGroup.style.display = 'none';
-              } else {
-                fuelEl.required = true;
-                if (fuelGroup) fuelGroup.style.display = 'block';
-              }
-            }
             document.getElementById('source-ef-factor').value = row.dataset.efFactor || '';
             document.getElementById('source-ef-unit').value = row.dataset.efUnit || '';
             document.getElementById('source-ef-source').value = row.dataset.efSource || '';
@@ -5395,6 +5475,9 @@
       
       const type      = document.getElementById('source-type-select').value;
       const eq        = document.getElementById('source-eq-match').value || '';
+      const fuelEl    = document.getElementById('source-fuel');
+      const fuelGroup = fuelEl ? fuelEl.closest('.form-group') : null;
+      const fuel      = (fuelEl && fuelGroup && fuelGroup.style.display !== 'none') ? fuelEl.value : '';
       const ef        = document.getElementById('source-ef').value || '';
       const customFactor = document.getElementById('source-ef-factor').value || '';
       const customUnit = document.getElementById('source-ef-unit').value || '';
@@ -5472,6 +5555,7 @@
         currentEditingSourceRow.dataset.category    = currentSourceCategory;
         currentEditingSourceRow.dataset.type        = type;
         currentEditingSourceRow.dataset.eq          = eq;
+        currentEditingSourceRow.dataset.fuel        = fuel;
         currentEditingSourceRow.dataset.ef          = ef;
         currentEditingSourceRow.dataset.efFactor    = customFactor;
         currentEditingSourceRow.dataset.efUnit      = customUnit;
@@ -5535,6 +5619,7 @@
         tr.dataset.isMaterial  = isMaterial;
         tr.dataset.materialityScore = materialityScore;
         tr.dataset.eq          = eq;
+        tr.dataset.fuel        = fuel;
         tr.dataset.ef          = ef;
         tr.dataset.efFactor    = customFactor;
         tr.dataset.efUnit      = customUnit;

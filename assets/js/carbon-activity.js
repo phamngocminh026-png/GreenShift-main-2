@@ -1005,10 +1005,9 @@
         const cat = row.dataset.category || '';
         const eq = row.dataset.eq || '';
 
-        // Phân loại nguồn năng lượng / điện / đốt cháy / rò rỉ:
         const isElectricity = (cat === 'Tiêu thụ điện' || cat === 'Tiêu thụ điện lưới' || cat === 'Điện mua vào' || cat === 'Điện năng mua vào' || cat.includes('Điện'));
-        const isCombustion = (cat === 'Đốt cháy cố định' || cat === 'Đốt cháy động' || cat === 'Đốt cháy di động');
-        const isFugitive = (cat === 'Phát thải thất thoát');
+        const isCombustion = (cat === 'Đốt cháy cố định' || cat === 'Đốt cháy động' || cat === 'Đốt cháy di động' || cat.includes('Đốt cháy') || cat.includes('đốt cháy'));
+        const isFugitive = (cat === 'Phát thải thất thoát' || cat === 'Phát thải rò rỉ' || cat.includes('thất thoát') || cat.includes('rò rỉ'));
 
         // Nguồn Quá trình công nghiệp (Scope 1 - IPPU): TUYỆT ĐỐI KHÔNG BAO GỒM TIÊU THỤ ĐIỆN VÀ ĐỐT NHIỆU LIỆU
         let isProc = false;
@@ -1037,7 +1036,13 @@
         if (isProc) {
             const efFactorNum = parseFloat(row.dataset.efFactor) || 60;
             const efDisplay = (efFactorNum > 5) ? `${efFactorNum} kgCO2e/tấn` : `${(efFactorNum * 1000)} kgCO2e/tấn (0.060 tCO2/tấn)`;
-            name = `Quá trình luyện thép - ${eq || 'Lò hồ quang điện EAF'} (IPPU: ${efDisplay})`;
+            const isSteel = (type.includes('luyện thép') || eq.includes('EAF') || eq.includes('hồ quang') || (row.dataset.productName || '').includes('Thép'));
+            if (isSteel) {
+              name = `Quá trình luyện thép - ${eq || 'Lò hồ quang điện EAF'} (IPPU: ${efDisplay})`;
+            } else {
+              const pTitle = row.dataset.productName ? `Quá trình sản xuất (${row.dataset.productName})` : 'Quá trình công nghệ';
+              name = `${pTitle} - ${eq || type} (IPPU: ${efDisplay})`;
+            }
         }
         
         const opt = document.createElement('option');
@@ -4245,7 +4250,33 @@
         sourceRows.forEach(r => { sources.push({ ...r.dataset }); });
       }
 
-      const processSources = sources.filter(s => s.isProcessEmission === 'true' || (s.category && s.category.includes('công nghiệp')));
+      const btnQuickLogProd = document.getElementById('btn-quick-log-production');
+
+      const processSources = sources.filter(s => {
+        const cat = s.category || '';
+        const isElec = cat.includes('điện') || cat.includes('Điện');
+        const isComb = cat.includes('đốt cháy') || cat.includes('Đốt cháy');
+        const isFug = cat.includes('rò rỉ') || cat.includes('thất thoát');
+        return (!isElec && !isComb && !isFug) && (
+          s.isProcessEmission === 'true' ||
+          cat === 'Các quá trình công nghiệp' ||
+          (s.measure && s.measure.includes('sản lượng')) ||
+          Boolean(s.productionUnit && s.productName) ||
+          (s.type && (s.type.includes('quá trình công nghiệp') || s.type.includes('thổi oxy') || s.type.includes('luyện thép')))
+        );
+      });
+
+      if (btnQuickLogProd) {
+        if (processSources.length === 0) {
+          btnQuickLogProd.style.display = 'none';
+        } else {
+          btnQuickLogProd.style.display = 'inline-block';
+          const firstIppu = processSources[0];
+          const prodName = firstIppu.productName || 'sản phẩm';
+          btnQuickLogProd.setAttribute('title', `Ghi nhận nhanh sản lượng ${prodName} ca / ngày hôm nay`);
+        }
+      }
+
       if (processSources.length === 0) {
         banner.style.display = 'none';
         return;
@@ -4334,21 +4365,24 @@
           dateInput.value = dateFilterVal || new Date().toISOString().slice(0, 10);
         }
 
+        const prodName = (targetOption && targetOption.dataset.productName) ? targetOption.dataset.productName : 'sản phẩm';
+        const prodUnit = (targetOption && targetOption.dataset.productionUnit) ? targetOption.dataset.productionUnit : 'tấn';
+
         const unitInput = document.getElementById('activity-unit');
         if (unitInput) {
-          unitInput.value = (targetOption && targetOption.dataset.productionUnit) ? targetOption.dataset.productionUnit : 'tấn';
+          unitInput.value = prodUnit;
         }
 
         const docInput = document.getElementById('activity-doc');
-        if (docInput && !docInput.value) {
-          docInput.value = 'Phiếu cân ca máy - Nghiệm thu phôi thép';
+        if (docInput && (!docInput.value || docInput.value.includes('phôi thép'))) {
+          docInput.value = `Phiếu cân ca máy - Nghiệm thu ${prodName}`;
         }
 
         switchActivityInputMode('direct');
 
         const panelDirectText = document.getElementById('panel-direct');
         if (panelDirectText) {
-          panelDirectText.innerText = 'Ghi nhận sản lượng phôi thép thô thực tế ra lò theo số đo bàn cân cầu điện tử hoặc biên bản giao nhận ca xưởng luyện thép.';
+          panelDirectText.innerText = `Ghi nhận sản lượng ${prodName} thực tế ra lò / thành phẩm theo số đo bàn cân điện tử hoặc biên bản giao nhận ca.`;
         }
 
         let qDayPlaceholder = '1916.93';

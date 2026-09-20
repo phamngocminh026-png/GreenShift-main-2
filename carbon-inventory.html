@@ -3006,11 +3006,46 @@
       // Clean sources load without cross-user leak
       if (!stored) return;
       try {
-        const sourceData = JSON.parse(stored);
-        if (!Array.isArray(sourceData) || sourceData.length === 0) return;
-        document.getElementById('no-source-row')?.remove();
+        let sourceData = JSON.parse(stored);
+        if (!Array.isArray(sourceData)) sourceData = [];
+
+        // Lọc bỏ triệt để các hạng mục năng lượng quy ước cấp cơ sở của Kế toán (FACILITY_ENERGY_SOURCES)
+        // để bảng Nguồn phát thải chỉ hiển thị các thiết bị/quá trình thực tế của nhà máy, tránh rác dữ liệu và tránh hiểu lầm tính trùng (double counting)
+        const isFacilityEnergySource = d => Boolean(
+          d && (d.isFacility === 'true' || d.isFacility === true ||
+          (d.id && String(d.id).startsWith('src_fac_')))
+        );
+
+        let hadFacilitySources = false;
+        const validSources = [];
+        sourceData.forEach(d => {
+          if (isFacilityEnergySource(d)) {
+            hadFacilitySources = true;
+          } else {
+            validSources.push(d);
+          }
+        });
 
         let needsSave = false;
+        if (hadFacilitySources) {
+          sourceData = validSources;
+          needsSave = true;
+        }
+
+        if (sourceData.length === 0) {
+          sourceTbodyEl.innerHTML = '<tr id="no-source-row"><td colspan="8" style="text-align: center; padding: 2rem; color: var(--color-text-secondary);">Chưa có dữ liệu</td></tr>';
+          if (needsSave) {
+            const emptyJson = JSON.stringify([]);
+            localStorage.setItem(getBranchStorageKey('sources'), emptyJson);
+            localStorage.setItem(`gs_data_${rawUser}_${branchKey}_sources`, emptyJson);
+            if (rawUser !== userSlug) {
+              localStorage.setItem(`gs_data_${userSlug}_${branchKey}_sources`, emptyJson);
+            }
+          }
+          return;
+        }
+
+        document.getElementById('no-source-row')?.remove();
 
         // Tự động kiểm tra và đồng bộ nguồn Quá trình công nghiệp (IPPU) cho các thiết bị công nghệ hiện có
         try {
@@ -3112,7 +3147,12 @@
         });
         
         if (needsSave) {
-          localStorage.setItem(getBranchStorageKey('sources'), JSON.stringify(sourceData));
+          const cleanJson = JSON.stringify(sourceData);
+          localStorage.setItem(getBranchStorageKey('sources'), cleanJson);
+          localStorage.setItem(`gs_data_${rawUser}_${branchKey}_sources`, cleanJson);
+          if (rawUser !== userSlug) {
+            localStorage.setItem(`gs_data_${userSlug}_${branchKey}_sources`, cleanJson);
+          }
         }
       } catch(e) { /* corrupt data */ }
     }

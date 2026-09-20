@@ -171,6 +171,15 @@ function renderDashboard() {
   const sourceMap = {};
   const sourceTypeMap = {};
   const sourceDaysWeekMap = {};
+
+  // Luôn nạp sẵn danh mục năng lượng cấp cơ sở (FACILITY_ENERGY_SOURCES) vào mapping nội bộ của Dashboard
+  const facMasterSources = (typeof window !== 'undefined' && window.InvoiceParser && window.InvoiceParser.FACILITY_ENERGY_SOURCES)
+    ? window.InvoiceParser.FACILITY_ENERGY_SOURCES
+    : [];
+  facMasterSources.forEach(src => {
+    if (src.id) sourceMap[src.id] = src.category || src.type || 'Khác';
+  });
+
   sources.forEach(src => {
     if (src.id) {
       sourceMap[src.id] = src.category || 'Khác';

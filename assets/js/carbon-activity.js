@@ -1001,6 +1001,9 @@
             needsSave = true;
         }
 
+        // Bỏ qua các hạng mục cơ sở nếu có trong rowsList để không bị hiển thị lặp ở nhóm thiết bị
+        if (row.dataset.isFacility === 'true' || row.dataset.isFacility === true || (id && id.startsWith('src_fac_'))) return;
+
         const type = row.dataset.type || '';
         const cat = row.dataset.category || '';
         const eq = row.dataset.eq || '';
@@ -5095,26 +5098,22 @@
         const branchKey = branchName.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '') || 'main';
         const slugSrcKey = `gs_data_${userSlug}_${branchKey}_sources`;
 
-        let currentSources = [];
+        // Nguồn năng lượng cấp cơ sở từ hóa đơn (FACILITY_ENERGY_SOURCES) là danh mục quy ước phục vụ Kế toán nhập liệu,
+        // TUYỆT ĐỐI KHÔNG chèn vào bảng danh mục nguồn thiết bị kỹ thuật (tránh gây ô nhiễm bảng và tránh nguy cơ tính trùng).
+        // Đồng thời chủ động dọn dẹp sạch nếu trước đó đã từng bị lưu lẫn vào sources.
         try {
           const s = localStorage.getItem(slugSrcKey) || localStorage.getItem(getBranchStorageKey('sources'));
-          if (s) currentSources = JSON.parse(s);
-        } catch(e) {}
-        if (!Array.isArray(currentSources)) currentSources = [];
-
-        let sourceAdded = false;
-        facSources.forEach(fSrc => {
-          if (!currentSources.some(x => x.id === fSrc.id)) {
-            currentSources.push({ ...fSrc });
-            sourceAdded = true;
+          if (s) {
+            let curList = JSON.parse(s);
+            if (Array.isArray(curList)) {
+              const cleaned = curList.filter(x => !x.isFacility && !String(x.id || '').startsWith('src_fac_'));
+              if (cleaned.length !== curList.length) {
+                localStorage.setItem(slugSrcKey, JSON.stringify(cleaned));
+                localStorage.setItem(getBranchStorageKey('sources'), JSON.stringify(cleaned));
+              }
+            }
           }
-        });
-        if (sourceAdded) {
-          try {
-            localStorage.setItem(slugSrcKey, JSON.stringify(currentSources));
-            localStorage.setItem(getBranchStorageKey('sources'), JSON.stringify(currentSources));
-          } catch(e) {}
-        }
+        } catch(e) {}
 
         let managerName = 'Kế toán viên';
         try {

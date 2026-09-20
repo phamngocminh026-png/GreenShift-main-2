@@ -856,6 +856,15 @@
               act.co2e = (parseFloat(act.amount || 0) * 60).toFixed(2);
               needsSave = true;
             }
+            // Tự động sửa chữa đơn vị cho các dòng quá trình công nghiệp IPPU nếu bị lưu nhầm thành kWh
+            const isProcAct = (act.sourceType && (act.sourceType.includes('thổi oxy') || act.sourceType.includes('luyện thép') || act.sourceType.includes('clanhke') || act.sourceType.includes('điện phân'))) ||
+                              (act.sourceName && (act.sourceName.includes('luyện thép') || act.sourceName.includes('thổi oxy'))) ||
+                              act.isProcessEmission === 'true' ||
+                              (act.finalFactor == 60 || act.finalFactor == '60');
+            if (isProcAct && (act.unit === 'kWh' || act.unit === 'kw' || !act.unit)) {
+              act.unit = 'tấn';
+              needsSave = true;
+            }
             if (act.doc) {
               act.doc = act.doc.replace(/\(\s*\d{1,2}(?::\d{2})?\s*-\s*\d{1,2}(?::\d{2})?\s*\)\s*\(\s*\d{1,2}(?::\d{2})?\s*-\s*\d{1,2}(?::\d{2})?\s*\)/g, (m) => {
                 const matches = m.match(/\(\s*\d{1,2}(?::\d{2})?\s*-\s*\d{1,2}(?::\d{2})?\s*\)/g);
@@ -863,8 +872,14 @@
               });
               act.doc = act.doc.replace(/\(\s*8\s*-\s*9\s*\)\s*\(\s*8:00\s*-\s*9:00\s*\)/g, '(08:00 - 09:00)');
             }
-            if (act.unit) {
-              act.unit = normalizeConsumptionUnit(act.unit, act.sourceType);
+            const isActProc = act.isProcessEmission === 'true' || 
+                              (act.category && (act.category.includes('công nghiệp') || act.category.includes('ippu'))) ||
+                              (act.sourceType && (act.sourceType.includes('quá trình') || act.sourceType.includes('thổi oxy') || act.sourceType.includes('luyện thép') || act.sourceType.includes('clanhke') || act.sourceType.includes('ippu') || act.sourceType.includes('điện phân'))) ||
+                              (act.sourceName && (act.sourceName.includes('thép') || act.sourceName.includes('quá trình') || act.sourceName.includes('thổi oxy') || act.sourceName.includes('clanhke') || act.sourceName.includes('luyện kim')));
+            if (isActProc && (act.unit === 'kWh' || act.unit === 'kw' || !act.unit)) {
+              act.unit = 'tấn';
+            } else if (act.unit) {
+              act.unit = normalizeConsumptionUnit(act.unit, act.sourceType, act.sourceName, act.category);
             }
           });
 
@@ -1265,9 +1280,14 @@
         const typeLower = (selected.dataset.type || '').toLowerCase();
         const eqLower = (selected.text || '').toLowerCase();
         const opCapUnit = (selected.dataset.opCapUnit || '').toLowerCase();
-        const efUnit = (selected.dataset.efUnit || '').toLowerCase();
-        const isProcess = selected.dataset.isProcessEmission === 'true' || typeLower.includes('quá trình công nghiệp') || Boolean(selected.dataset.productionUnit);
-        const isElectric = typeLower.includes('điện') || eqLower.includes('điện') || eqLower.includes('chiller') || eqLower.includes('làm mát') || eqLower.includes('máy lạnh') || eqLower.includes('điều hòa') || eqLower.includes('nén khí') || opCapUnit.includes('kw');
+        const isProcess = selected.dataset.isProcessEmission === 'true' || 
+                          typeLower.includes('quá trình') || 
+                          typeLower.includes('thổi oxy') || 
+                          typeLower.includes('luyện thép') || 
+                          typeLower.includes('clanhke') || 
+                          typeLower.includes('ippu') || 
+                          Boolean(selected.dataset.productionUnit);
+        const isElectric = !isProcess && (typeLower.includes('điện') || eqLower.includes('điện') || eqLower.includes('chiller') || eqLower.includes('làm mát') || eqLower.includes('máy lạnh') || eqLower.includes('điều hòa') || eqLower.includes('nén khí') || opCapUnit.includes('kw'));
 
         let targetUnit = selected.dataset.unit || '';
         if (!targetUnit) {
@@ -1705,13 +1725,25 @@
       return `${u}/h`;
     }
 
-    function normalizeConsumptionUnit(unitStr, sourceType) {
+    function normalizeConsumptionUnit(unitStr, sourceType, sourceName, category) {
+      const combined = `${sourceType || ''} ${sourceName || ''} ${category || ''}`.toLowerCase();
+      const isProc = combined.includes('quá trình') || combined.includes('thổi oxy') || combined.includes('luyện thép') || combined.includes('clanhke') || combined.includes('ippu') || combined.includes('điện phân') || combined.includes('sản xuất thép');
+      
       if (!unitStr) {
-        return (sourceType && sourceType.toLowerCase().includes('điện')) ? 'kWh' : 'lít';
+        if (isProc) return 'tấn';
+        return (combined.includes('điện')) ? 'kWh' : 'lít';
       }
       const u = unitStr.toLowerCase().trim();
+      if (isProc) {
+        if (u.includes('tấn') || u.includes('tan') || u === 't' || u.includes('t/')) return 'tấn';
+        if (u.includes('đôi')) return 'đôi';
+        if (u.includes('mét') || u.includes('met') || u === 'm') return 'mét';
+        if (u.includes('kg')) return 'kg';
+        if (u.includes('kwh') || u.includes('kw')) return 'tấn'; // Nguồn phát thải quá trình tuyệt đối không dùng đơn vị kWh điện
+        return 'tấn';
+      }
       if (u.includes('kwh') || u.includes('kw.h')) return 'kWh';
-      if (u.includes('kw') || u.includes('w')) return 'kWh';
+      if (/\b(kw|kwh)\b/.test(u) || u === 'kw' || u === 'kwh') return 'kWh';
       if (u.includes('lít') || u.includes('lit') || u === 'l' || u.startsWith('l/')) return 'lít';
       if (u.includes('kg')) return 'kg';
       if (u.includes('m3') || u.includes('m³')) return 'm³';
@@ -1721,6 +1753,7 @@
         if (num.includes('lít') || num.includes('lit') || num === 'l') return 'lít';
         if (num.includes('kw')) return 'kWh';
         if (num.includes('kg')) return 'kg';
+        if (num.includes('tấn') || num.includes('tan')) return 'tấn';
         return num;
       }
       return unitStr;
@@ -3339,7 +3372,7 @@
         });
 
         const isFugitive = ms.isFugitive || (ms.category && (ms.category.includes('rò rỉ') || ms.category.includes('thất thoát'))) || (ms.name && (ms.name.toLowerCase().includes('chiller') || ms.name.toLowerCase().includes('điều hòa')));
-        const consumptionUnit = isFugitive ? 'kg' : normalizeConsumptionUnit(ms.capUnit, ms.type);
+        const consumptionUnit = isFugitive ? 'kg' : normalizeConsumptionUnit(ms.capUnit, ms.type, ms.name, ms.category);
         const rateUnitDisplay = isFugitive ? '—' : formatRateUnit(ms.capUnit, ms.type);
         const baseAnnual = isFugitive 
           ? (ms.annualEstQty > 0 ? ms.annualEstQty : (ms.capacity > 0 ? Math.round(ms.capacity * 0.03 * 100) / 100 : 3.6))
@@ -3374,7 +3407,6 @@
     }
 
     // ============================================================
-        // ============================================================
     // BẢNG ĐỐI SOÁT NĂNG LƯỢNG: KẾ TOÁN VS KỸ SƯ (RECONCILIATION)
     // ============================================================
     function renderReconciliationSummary() {
@@ -3421,10 +3453,12 @@
       const sourceRows = document.querySelectorAll('#source-tbody tr:not(#no-source-row)');
 
       const actRowData = [];
+      const invoiceData = [];
       let invoiceElectricity = 0;
       let invoiceFuel = 0;
       let invoiceRef = 0;
       const currentActiveRole = localStorage.getItem('gs_user_role') || 'engineer';
+      const filterMonthVal = document.getElementById('act-filter-month')?.value || '';
 
       actRows.forEach(ar => {
         const doc = (ar.dataset.doc || '').toLowerCase();
@@ -3438,9 +3472,10 @@
         const isDowntime = ar.dataset.isDowntime;
         const dtHours = parseFloat(ar.dataset.downtimeHours) || 0;
         const otHours = parseFloat(ar.dataset.overtimeHours) || 0;
+        const rowDate = ar.dataset.date || '';
 
         actRowData.push({
-          doc, type, sourceName, amt, dtHours, otHours, isDowntime
+          doc, type, sourceName, amt, dtHours, otHours, isDowntime, date: rowDate
         });
 
         // Nhận diện Hóa đơn Kế toán: do kế toán nhập, hoặc chế độ trực tiếp/hóa đơn, hoặc có từ khóa hóa đơn/chứng từ
@@ -3456,16 +3491,34 @@
                           entryRole !== 'engineer';
 
         if (isInvoice) {
-          const isRefInvoice = (type.includes('rò rỉ') || type.includes('môi chất') || type.includes('gas lạnh') ||
-                               doc.includes('r-410a') || doc.includes('r-134a') || doc.includes('r-22') || doc.includes('r-32') || doc.includes('fm-200') ||
-                               doc.includes('gas lạnh') || doc.includes('nạp gas') || doc.includes('môi chất lạnh') || doc.includes('khí nạp'));
-          if (isRefInvoice) {
-            invoiceRef += amt;
-          } else if (type.includes('điện') || type.includes('dien') || unit === 'kwh' || sourceName.includes('điện') || sourceName.includes('dien') || (sourceName.includes('chiller') && unit === 'kwh')) {
-            invoiceElectricity += amt;
-          } else {
-            invoiceFuel += amt;
-          }
+          invoiceData.push({
+            doc, type, sourceName, unit, amt, date: rowDate
+          });
+        }
+      });
+
+      // Nhận diện các tháng có hóa đơn trong dữ liệu
+      const invoiceMonths = [...new Set(invoiceData.map(i => i.date ? i.date.slice(0, 7) : '').filter(Boolean))].sort();
+
+      let matchedInvoices = invoiceData;
+      if (isMonth) {
+        if (filterMonthVal && filterMonthVal !== 'all' && filterMonthVal !== 'ytd') {
+          matchedInvoices = invoiceData.filter(i => i.date && i.date.split('-')[1] === filterMonthVal);
+        } else if (invoiceMonths.length === 1) {
+          matchedInvoices = invoiceData.filter(i => i.date && i.date.startsWith(invoiceMonths[0]));
+        }
+      }
+
+      matchedInvoices.forEach(inv => {
+        const isRefInvoice = (inv.type.includes('rò rỉ') || inv.type.includes('môi chất') || inv.type.includes('gas lạnh') ||
+                             inv.doc.includes('r-410a') || inv.doc.includes('r-134a') || inv.doc.includes('r-22') || inv.doc.includes('r-32') || inv.doc.includes('fm-200') ||
+                             inv.doc.includes('gas lạnh') || inv.doc.includes('nạp gas') || inv.doc.includes('môi chất lạnh') || inv.doc.includes('khí nạp'));
+        if (isRefInvoice) {
+          invoiceRef += inv.amt;
+        } else if (inv.type.includes('điện') || inv.type.includes('dien') || inv.unit === 'kwh' || inv.sourceName.includes('điện') || inv.sourceName.includes('dien') || (inv.sourceName.includes('chiller') && inv.unit === 'kwh')) {
+          invoiceElectricity += inv.amt;
+        } else {
+          invoiceFuel += inv.amt;
         }
       });
 
@@ -3512,10 +3565,48 @@
         }
       });
 
-      // Nếu xem theo tháng: lấy mức ước tính 1 tháng (annual / 12)
-      const compElectricity = isMonth ? Math.round((machineElectricity / 12) * 100) / 100 : machineElectricity;
-      const compFuel = isMonth ? Math.round((machineFuel / 12) * 100) / 100 : machineFuel;
-      const compRef = isMonth ? Math.round((machineRef / 12) * 100) / 100 : machineRef;
+      let compElectricity = 0;
+      let compFuel = 0;
+      let compRef = 0;
+
+      if (isMonth) {
+        if (invoiceMonths.length > 1 && (!filterMonthVal || filterMonthVal === 'all' || filterMonthVal === 'ytd')) {
+          invoiceElectricity = Math.round((invoiceElectricity / invoiceMonths.length) * 100) / 100;
+          invoiceFuel = Math.round((invoiceFuel / invoiceMonths.length) * 100) / 100;
+          invoiceRef = Math.round((invoiceRef / invoiceMonths.length) * 100) / 100;
+        }
+        compElectricity = Math.round((machineElectricity / 12) * 100) / 100;
+        compFuel = Math.round((machineFuel / 12) * 100) / 100;
+        compRef = Math.round((machineRef / 12) * 100) / 100;
+      } else {
+        if (invoiceMonths.length > 0 && invoiceMonths.length < 12) {
+          compElectricity = Math.round(((machineElectricity / 12) * invoiceMonths.length) * 100) / 100;
+          compFuel = Math.round(((machineFuel / 12) * invoiceMonths.length) * 100) / 100;
+          compRef = Math.round(((machineRef / 12) * invoiceMonths.length) * 100) / 100;
+        } else {
+          compElectricity = machineElectricity;
+          compFuel = machineFuel;
+          compRef = machineRef;
+        }
+      }
+
+      const noticeEl = document.getElementById('recon-period-notice');
+      if (noticeEl) {
+        if (invoiceMonths.length === 1 && !isMonth) {
+          noticeEl.style.display = 'block';
+          noticeEl.innerHTML = `Lưu ý: Hóa đơn kế toán mới ghi nhận cho ${invoiceMonths[0]} (1 tháng). Hệ thống đã tự động quy đổi định mức kỹ sư tương ứng 1 tháng để đối soát chuẩn xác. Bật 'Theo Tháng' để đối soát chi tiết.`;
+        } else if (invoiceMonths.length > 1 && invoiceMonths.length < 12 && !isMonth) {
+          noticeEl.style.display = 'block';
+          noticeEl.innerHTML = `Lưu ý: Hóa đơn kế toán mới ghi nhận ${invoiceMonths.length} tháng (${invoiceMonths.join(', ')}). Hệ thống đã quy đổi tương ứng ${invoiceMonths.length} tháng định mức kỹ sư.`;
+        } else if (invoiceMonths.length === 1 && isMonth) {
+          noticeEl.style.display = 'block';
+          const mPart = invoiceMonths[0].split('-')[1];
+          noticeEl.innerHTML = `Đang đối soát theo kỳ Tháng ${parseInt(mPart, 10)}/${invoiceMonths[0].split('-')[0]} (1 tháng hóa đơn kế toán vs 1 tháng định mức kỹ sư).`;
+        } else {
+          noticeEl.style.display = 'none';
+          noticeEl.innerHTML = '';
+        }
+      }
 
       const categories = [];
       if (invoiceElectricity > 0 || compElectricity > 0) {
@@ -3601,6 +3692,7 @@
         tbodyEl.appendChild(tr);
       });
     }
+
 
     // TỰ ĐỘNG PHÂN BỔ LỊCH VẬN HÀNH 12 THÁNG CHO KỸ SƯ
     // ============================================================
@@ -4033,6 +4125,9 @@
               sourceId: src.id || '',
               sourceType: src.type || '',
               sourceName: sourceDisplayName,
+              category: src.category || (isProc ? 'Các quá trình công nghiệp' : (isBiomassSrc ? 'Đốt cháy sinh khối (Biogenic)' : (isFugitive ? 'Phát thải thất thoát' : (isWastewater ? 'Xử lý nước thải nội bộ' : '')))),
+              fuel: src.ef || '',
+              ef: src.ef || '',
               amount: dailyQty,
               unit: unitName,
               doc: curDocStr,
@@ -6393,6 +6488,7 @@
     window.openInvoiceImportPreviewModal = openInvoiceImportPreviewModal;
     window.closeInvoiceImportPreviewModal = closeInvoiceImportPreviewModal;
     window.commitBatchInvoices = commitBatchInvoices;
+    window.normalizeConsumptionUnit = normalizeConsumptionUnit;
 
     loadActivityList();
     renderMachineOverview();

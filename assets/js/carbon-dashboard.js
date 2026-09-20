@@ -195,7 +195,12 @@ function renderDashboard() {
 
   const CATEGORY_SCOPE = {
     // Scope 1 (Loại 1)
-    'Đốt cháy cố định': 1, 'Đốt cháy di động': 1, 'Đốt cháy động': 1, 'Phát thải thất thoát': 1, 'Các quá trình công nghiệp': 1, 'Sử dụng đất, thay đổi sử dụng đất và lâm nghiệp (LULUCF)': 1, 'Xử lý nước thải nội bộ': 1, 'Xử lý nước thải': 1,
+    'Đốt cháy cố định': 1, 'Đốt cháy di động': 1, 'Đốt cháy động': 1,
+    'Đốt cháy sinh khối (Biogenic)': 1, 'Đốt cháy sinh khối': 1, 'Sinh khối': 1, 'Biomass': 1,
+    'Phát thải thất thoát': 1, 'Phát thải rò rỉ': 1, 'Rò rỉ môi chất lạnh': 1, 'Thất thoát rò rỉ': 1,
+    'Các quá trình công nghiệp': 1, 'Quá trình công nghiệp': 1, 'IPPU': 1, 'Process Emissions': 1,
+    'Sử dụng đất, thay đổi sử dụng đất và lâm nghiệp (LULUCF)': 1, 'LULUCF': 1, 'AFOLU': 1,
+    'Xử lý nước thải nội bộ': 1, 'Xử lý nước thải': 1, 'Xử lý chất thải / Nước thải': 1, 'Chất thải': 1, 'Nước thải': 1,
     // Scope 2 (Loại 2)
     'Điện mua vào': 2, 'Tiêu thụ điện': 2, 'Tiêu thụ điện lưới': 2, 'Điện năng mua vào': 2, 'Năng lượng mua vào (hơi, nhiệt)': 2, 'Hơi nhiệt mua vào': 2, 'Năng lượng mua vào': 2,
     // Scope 3 (Loại 3, 4, 5, 6)
@@ -209,9 +214,10 @@ function renderDashboard() {
     if (!cat || cat === 'Chưa phân loại') return 0;
     if (CATEGORY_SCOPE[cat]) return CATEGORY_SCOPE[cat];
     const lower = String(cat).toLowerCase();
-    if (lower.includes('nước thải') || lower.includes('nuoc thai')) return 1;
+    if (lower.includes('nước thải') || lower.includes('nuoc thai') || lower.includes('chất thải') || lower.includes('chat thai')) return 1;
+    if (lower.includes('sinh khối') || lower.includes('biomass') || lower.includes('biogenic')) return 1;
     if (lower.includes('điện') || lower.includes('năng lượng mua vào') || lower.includes('hơi') || lower.includes('nhiệt') || lower.includes('kwh') || lower.includes('evn')) return 2;
-    if (lower.includes('cố định') || lower.includes('động') || lower.includes('thất thoát') || lower.includes('rò rỉ') || lower.includes('công nghiệp') || lower.includes('lulucf') || lower.includes('diesel') || lower.includes('xăng') || lower.includes('lpg') || lower.includes('than')) return 1;
+    if (lower.includes('cố định') || lower.includes('động') || lower.includes('thất thoát') || lower.includes('rò rỉ') || lower.includes('công nghiệp') || lower.includes('ippu') || lower.includes('lulucf') || lower.includes('diesel') || lower.includes('xăng') || lower.includes('lpg') || lower.includes('than')) return 1;
     return 3;
   };
 
@@ -221,7 +227,7 @@ function renderDashboard() {
     if (combined.includes('xăng') || combined.includes('xang') || combined.includes('petrol') || combined.includes('gasoline')) return 'petrol';
     if (combined.includes('than') || combined.includes('coal') || combined.includes('antraxit')) return 'coal';
     if (combined.includes('gas') || combined.includes('lpg') || combined.includes('cng') || combined.includes('lng')) return 'gas';
-    if (combined.includes('r-') || combined.includes('môi chất') || combined.includes('gas lạnh') || combined.includes('hfc') || combined.includes('cfc') || combined.includes('fm200')) return 'refrigerant';
+    if (combined.includes('r-') || combined.includes('môi chất') || combined.includes('gas lạnh') || combined.includes('hfc') || combined.includes('cfc') || combined.includes('fm200') || combined.includes('fm-200')) return 'refrigerant';
     if (combined.includes('sinh khối') || combined.includes('biomass') || combined.includes('củi') || combined.includes('trấu') || combined.includes('mùn cưa')) return 'biomass';
     if (combined.includes('điện') || combined.includes('dien') || combined.includes('evn') || combined.includes('kwh')) return 'electricity';
     return act.category || 'other';
@@ -239,28 +245,47 @@ function renderDashboard() {
       if (CATEGORY_SCOPE[mapped]) return mapped;
     }
 
-    // Nhận diện tự động: Ưu tiên nhiên liệu đốt cháy & thiết bị phát điện (Scope 1) trước "điện"
-    const combinedStr = `${act.sourceName || ''} ${act.sourceType || ''} ${act.category || ''} ${act.fuel || ''} ${act.ef || ''}`.toLowerCase();
+    // Nhận diện tự động theo ngữ nghĩa của nguồn và hoạt động
+    const isProc = act.isProcessEmission === 'true' || act.isProcessEmission === true;
+    const combinedStr = `${act.sourceName || ''} ${act.sourceType || ''} ${act.category || ''} ${act.fuel || ''} ${act.ef || ''} ${act.efName || ''} ${act.doc || ''}`.toLowerCase();
     
-    // 1. Rò rỉ môi chất lạnh / PCCC (Scope 1) - Ưu tiên trước để gas lạnh không rơi vào nhánh gas đốt
-    if (combinedStr.includes('r-') || combinedStr.includes('môi chất') || combinedStr.includes('gas lạnh') || combinedStr.includes('gas lanh') || combinedStr.includes('hfc') || combinedStr.includes('cfc') || combinedStr.includes('fm200') || combinedStr.includes('pccc') || combinedStr.includes('chữa cháy') || combinedStr.includes('chua chay')) return 'Phát thải thất thoát';
+    // 0. Quá trình công nghệ (IPPU - Scope 1)
+    if (isProc || combinedStr.includes('quá trình công nghiệp') || combinedStr.includes('luyện thép') || combinedStr.includes('thổi oxy') || combinedStr.includes('clanhke') || combinedStr.includes('điện phân nhôm') || combinedStr.includes('ippu')) {
+      return 'Các quá trình công nghiệp';
+    }
 
-    // 2. Đốt cháy cố định (Scope 1) - bao gồm Máy phát điện chạy dầu DO
+    // 1. Rò rỉ môi chất lạnh / PCCC (Scope 1) - Ưu tiên trước để gas lạnh không rơi vào nhánh gas đốt
+    if (combinedStr.includes('r-') || combinedStr.includes('môi chất') || combinedStr.includes('gas lạnh') || combinedStr.includes('gas lanh') || combinedStr.includes('hfc') || combinedStr.includes('cfc') || combinedStr.includes('fm200') || combinedStr.includes('fm-200') || combinedStr.includes('amoniac') || combinedStr.includes('nh3') || combinedStr.includes('pccc') || combinedStr.includes('chữa cháy') || combinedStr.includes('chua chay') || combinedStr.includes('rò rỉ') || combinedStr.includes('thất thoát') || combinedStr.includes('khí nạp')) {
+      return 'Phát thải thất thoát';
+    }
+
+    // 2. Đốt cháy sinh khối (Scope 1 - Biogenic)
+    if (act.isBiomass === 'true' || combinedStr.includes('sinh khối') || combinedStr.includes('biomass') || combinedStr.includes('biogenic') || combinedStr.includes('củi') || combinedStr.includes('trấu') || combinedStr.includes('mùn cưa') || combinedStr.includes('bã mía') || combinedStr.includes('dịch đen') || combinedStr.includes('viên nén gỗ')) {
+      return 'Đốt cháy sinh khối (Biogenic)';
+    }
+
+    // 3. Đốt cháy cố định (Scope 1) - than, gas đốt, dầu DO/FO lò hơi, máy phát điện
     if (combinedStr.includes('diesel') || combinedStr.includes('dầu do') || combinedStr.includes('dau do') || combinedStr.includes('dầu fo') || combinedStr.includes('dau fo') || combinedStr.includes('lò hơi') || combinedStr.includes('máy phát điện') || combinedStr.includes('may phat dien')) return 'Đốt cháy cố định';
     if (combinedStr.includes('lpg') || combinedStr.includes('cng') || combinedStr.includes('lng') || (combinedStr.includes('gas') && !combinedStr.includes('gas lạnh') && !combinedStr.includes('gas lanh'))) return 'Đốt cháy cố định';
-    if (combinedStr.includes('than') || combinedStr.includes('coal') || combinedStr.includes('sinh khối') || combinedStr.includes('biomass') || combinedStr.includes('củi') || combinedStr.includes('trấu') || combinedStr.includes('mùn cưa')) return 'Đốt cháy cố định';
+    if (combinedStr.includes('than') || combinedStr.includes('coal') || combinedStr.includes('antraxit') || combinedStr.includes('than cốc')) return 'Đốt cháy cố định';
 
-    // 3. Đốt cháy di động (Scope 1)
+    // 4. Đốt cháy di động (Scope 1) - xăng, xe nâng, xe tải
     if (combinedStr.includes('xăng') || combinedStr.includes('xang') || combinedStr.includes('xe nâng') || combinedStr.includes('ô tô') || combinedStr.includes('xe tải') || combinedStr.includes('phương tiện')) return 'Đốt cháy động';
 
-    // 4. Xử lý nước thải nội bộ (Scope 1 chuẩn IPCC Vol 5 & NĐ 06)
-    if (combinedStr.includes('nước thải') || combinedStr.includes('nuoc thai') || combinedStr.includes('tự hoại') || combinedStr.includes('bod') || combinedStr.includes('cod')) return 'Xử lý nước thải nội bộ';
+    // 5. Xử lý nước thải nội bộ (Scope 1 chuẩn IPCC Vol 5 & NĐ 06)
+    if (combinedStr.includes('nước thải') || combinedStr.includes('nuoc thai') || combinedStr.includes('chất thải') || combinedStr.includes('tự hoại') || combinedStr.includes('bể phốt') || combinedStr.includes('bod') || combinedStr.includes('cod')) return 'Xử lý nước thải nội bộ';
 
-    // 5. Điện mua vào (Scope 2) - sau khi đã loại trừ máy phát điện DO
+    // 6. Điện mua vào (Scope 2) - sau khi đã loại trừ máy phát điện DO
     if (combinedStr.includes('điện') || combinedStr.includes('dien') || combinedStr.includes('evn') || combinedStr.includes('chiller') || combinedStr.includes('kwh') || combinedStr.includes('công tơ')) return 'Điện mua vào';
 
     return 'Chưa phân loại';
   };
+
+  if (typeof window !== 'undefined') {
+    window.CATEGORY_SCOPE = CATEGORY_SCOPE;
+    window.getScopeNum = getScopeNum;
+    window.getTrueCategory = getTrueCategory;
+  }
 
   // Phân loại rạch ròi giữa Hóa đơn Kế toán và Dữ liệu Kỹ thuật vận hành máy
   const isInvoiceAct = act => (act.entryRole === 'accountant' || act.isInvoice === 'true');

@@ -1313,6 +1313,8 @@
               </div>
             </div>
 
+            <div id="recon-period-notice" style="display: none; padding: 6px 12px; margin: 0 0 10px 0; background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 6px; font-size: 0.75rem; color: #1e40af;"></div>
+
             <div class="table-container" style="overflow-x: auto;">
               <table style="width: 100%; border-collapse: collapse; font-size: 0.8rem;">
                 <thead>
@@ -4114,7 +4116,7 @@
       const fuelSrc = srcList.find(s => s.category.includes('Đốt cháy cố định')) || srcList.find(s => s.id !== elecSrc?.id);
       const ippuSrc = srcList.find(s => s.isProcessEmission === 'true');
 
-      const activities = [];
+      let activities = [];
       for (let m = 1; m <= 12; m++) {
         const mStr = String(m).padStart(2, '0');
 
@@ -4133,6 +4135,7 @@
               sourceId: elecSrc.id,
               sourceName: elecSrc.name,
               sourceType: elecSrc.type || 'Tiêu thụ điện',
+              category: elecSrc.category || 'Tiêu thụ điện',
               amount: String(dayAmt),
               unit: elecSrc.capUnit === 'kW' ? 'kWh' : elecSrc.capUnit,
               finalFactor: String(ef),
@@ -4156,6 +4159,7 @@
               sourceId: ippuSrc.id,
               sourceName: ippuSrc.name,
               sourceType: ippuSrc.type || 'Các quá trình công nghiệp',
+              category: ippuSrc.category || 'Các quá trình công nghiệp',
               amount: String(ippuAmt),
               unit: ippuSrc.productionUnit || 'tấn',
               finalFactor: String(fFactor),
@@ -4180,6 +4184,7 @@
               sourceId: fuelSrc.id,
               sourceName: fuelSrc.name,
               sourceType: fuelSrc.type || 'Đốt cháy cố định',
+              category: fuelSrc.category || 'Đốt cháy cố định',
               amount: String(fAmt),
               unit: fuelSrc.capUnit || 'kg',
               finalFactor: String(fFactor),
@@ -4204,6 +4209,7 @@
             sourceId: elecSrc.id,
             sourceName: elecSrc.name,
             sourceType: elecSrc.type || 'Tiêu thụ điện',
+            category: elecSrc.category || 'Tiêu thụ điện',
             amount: String(mElecAmt),
             unit: 'kWh',
             finalFactor: String(ef),
@@ -4226,6 +4232,7 @@
             sourceId: fuelSrc.id,
             sourceName: fuelSrc.name,
             sourceType: fuelSrc.type || 'Đốt cháy cố định',
+            category: fuelSrc.category || 'Đốt cháy cố định',
             amount: String(mFuelAmt),
             unit: fuelSrc.capUnit || 'kg',
             finalFactor: String(fFactor),

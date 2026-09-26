@@ -12598,7 +12598,7 @@
 
     const norm = (typeof window.removeVietnameseTones === 'function')
       ? window.removeVietnameseTones(industryName).trim().toLowerCase()
-      : String(industryName).trim().toLowerCase();
+      : String(industryName).normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'd').trim().toLowerCase();
 
     const sheetName = window.INDUSTRY_16_ALIAS_MAP[norm];
     if (sheetName && window.INDUSTRY_16_CATALOG[sheetName]) {

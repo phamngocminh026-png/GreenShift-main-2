@@ -2961,6 +2961,8 @@
     const CATEGORY_SCOPE = {
       // Scope 1 (Loại 1 - Trực tiếp)
       'Đốt cháy cố định':                                    { label: 'Loại 1', scope: 1 },
+      'Đốt cháy sinh khối (Biogenic)':                       { label: 'Loại 1', scope: 1 },
+      'Đốt cháy sinh khối':                                  { label: 'Loại 1', scope: 1 },
       'Đốt cháy động':                                       { label: 'Loại 1', scope: 1 },
       'Đốt cháy di động':                                    { label: 'Loại 1', scope: 1 },
       'Phát thải thất thoát':                                { label: 'Loại 1', scope: 1 },
@@ -3010,7 +3012,7 @@
     // Bảng quy tắc toàn cục tự động nhận diện thiết bị có phát thải quá trình công nghệ (IPPU / Scope 1)
     window.IPPU_EQUIPMENT_RULES = [
       {
-        keywords: ['lò hồ quang điện', 'lò hồ quang', 'eaf', 'hồ quang'],
+        keywords: ['lò hồ quang điện', 'lò hồ quang', 'lò eaf', 'luyện thép eaf'],
         category: 'Các quá trình công nghiệp',
         type: 'Lò thổi oxy hoặc lò hồ quang điện trong luyện thép',
         efName: 'Thép lò hồ quang điện (EAF)',
@@ -3022,7 +3024,7 @@
         title: '[Quá trình công nghệ] Lò hồ quang điện (EAF) - Oxy hóa than & điện cực'
       },
       {
-        keywords: ['lò thổi oxy', 'lò thổi', 'bof'],
+        keywords: ['lò thổi oxy', 'lò thổi bof', 'lò bof'],
         category: 'Các quá trình công nghiệp',
         type: 'Lò thổi oxy hoặc lò hồ quang điện trong luyện thép',
         efName: 'Thép lò thổi Oxy (BOF)',
@@ -3034,7 +3036,7 @@
         title: '[Quá trình công nghệ] Lò thổi oxy (BOF) - Khử cacbon gang lỏng'
       },
       {
-        keywords: ['lò nung clinker', 'clinker'],
+        keywords: ['lò nung clinker', 'lò quay nung clinker', 'lò quay clinker', 'buồng calciner', 'lò nung clanhke', 'lò quay nung'],
         category: 'Các quá trình công nghiệp',
         type: 'Lò phân hủy đá vôi trong',
         efName: 'Sản xuất Clinker xi măng',
@@ -3080,6 +3082,30 @@
         productName: 'Nhôm nguyên sinh',
         productionUnit: 'tấn',
         title: '[Quá trình công nghệ] Bể điện phân nhôm - Tiêu hao anot carbon'
+      },
+      {
+        keywords: ['lò reforming sơ cấp', 'reforming sơ cấp', 'reforming thứ cấp', 'tổng hợp ure', 'sản xuất amoniac', 'tháp phản ứng tổng hợp ure'],
+        category: 'Các quá trình công nghiệp',
+        type: 'Lò Reforming hơi nước mê-tan trong sản xuất hóa chất',
+        efName: 'Sản xuất Amoniac (Reforming khí tự nhiên)',
+        efFactor: 1694, // 1.694 tCO2/tấn NH3 (IPCC Tier 1 / QĐ 2626)
+        efFactorDisplay: '1.694 tCO2/tấn NH3 (1694 kgCO2e/tấn)',
+        efUnit: 'kgCO2e/tấn',
+        productName: 'Amoniac (NH3) / Phân đạm Ure',
+        productionUnit: 'tấn',
+        title: '[Quá trình công nghệ] Lò Reforming sản xuất Amoniac (NH3)'
+      },
+      {
+        keywords: ['lò reforming hơi nước', 'lò reforming hơi nước mê-tan', 'smr sản xuất hydrogen', 'steam methane reformer'],
+        category: 'Các quá trình công nghiệp',
+        type: 'Lò Reforming hơi nước mê-tan trong sản xuất hóa chất',
+        efName: 'Sản xuất Hydrogen (Reforming hơi nước SMR)',
+        efFactor: 8900, // 8.900 tCO2/tấn H2 (IPCC / EU CBAM Hydrogen)
+        efFactorDisplay: '8.900 tCO2/tấn H2 (8900 kgCO2e/tấn)',
+        efUnit: 'kgCO2e/tấn',
+        productName: 'Khí Hydro (H2)',
+        productionUnit: 'tấn',
+        title: '[Quá trình công nghệ] Lò Reforming hơi nước (SMR) sản xuất Hydrogen'
       }
     ];
 
@@ -3094,8 +3120,8 @@
       if (str.includes('nước thải') || str.includes('bể tự hoại') || str.includes('wwtp') || (str.includes('xử lý chất thải') && !str.includes('phát sinh') && !str.includes('thu gom'))) {
         return { label: 'Loại 1', scope: 1 };
       }
-      // Nhận diện Scope 1: Đốt cháy, Rò rỉ, Quá trình công nghiệp, LULUCF
-      if (str.includes('cố định') || str.includes('động') || str.includes('thất thoát') || str.includes('rò rỉ') || str.includes('công nghiệp') || str.includes('lulucf') || str.includes('diesel') || str.includes('xăng') || str.includes('lpg') || str.includes('than')) {
+      // Nhận diện Scope 1: Đốt cháy, Rò rỉ, Quá trình công nghiệp, LULUCF, Sinh khối
+      if (str.includes('cố định') || str.includes('động') || str.includes('sinh khối') || str.includes('biomass') || str.includes('thất thoát') || str.includes('rò rỉ') || str.includes('công nghiệp') || str.includes('lulucf') || str.includes('diesel') || str.includes('xăng') || str.includes('lpg') || str.includes('than')) {
         return { label: 'Loại 1', scope: 1 };
       }
       // Nhận diện Scope 3: Vận chuyển, Đi lại
@@ -3179,7 +3205,8 @@
               const eqType = eq.type || '';
               const eqName = eq.name || '';
               const lowerStr = (eqType + ' ' + eqName).toLowerCase();
-              const matchedIppu = ippuRules.find(rule => rule.keywords.some(kw => lowerStr.includes(kw)));
+              const isCoolerOrAux = lowerStr.includes('làm nguội') || lowerStr.includes('cooler') || lowerStr.includes('nghiền') || lowerStr.includes('mill') || lowerStr.includes('silo') || lowerStr.includes('băng tải') || lowerStr.includes('conveyor') || lowerStr.includes('hút bụi') || lowerStr.includes('baghouse') || lowerStr.includes('lọc bụi') || lowerStr.includes('quạt') || lowerStr.includes('xử lý bụi') || lowerStr.includes('hàn') || lowerStr.includes('robot hàn') || lowerStr.includes('máy hàn');
+              const matchedIppu = isCoolerOrAux ? null : ippuRules.find(rule => rule.keywords.some(kw => lowerStr.includes(kw)));
               if (matchedIppu) {
                 const ippuSrcAsset = eq.asset ? `${eq.asset}-IPPU` : '';
                 const ippuMatchName = `${matchedIppu.title} (${eqName})`;
@@ -4806,10 +4833,11 @@
 
               // 3. TỰ ĐỘNG KHỞI TẠO KÉP: Nguồn Quá trình công nghiệp (Scope 1 - IPPU) nếu là thiết bị công nghệ đặc thù
               const lowerStr = (type + ' ' + name).toLowerCase();
+              const isCoolerOrAux = lowerStr.includes('làm nguội') || lowerStr.includes('cooler') || lowerStr.includes('nghiền') || lowerStr.includes('mill') || lowerStr.includes('silo') || lowerStr.includes('băng tải') || lowerStr.includes('conveyor') || lowerStr.includes('hút bụi') || lowerStr.includes('baghouse') || lowerStr.includes('lọc bụi') || lowerStr.includes('quạt') || lowerStr.includes('xử lý bụi') || lowerStr.includes('hàn') || lowerStr.includes('robot hàn') || lowerStr.includes('máy hàn');
               const activeIppuRules = (typeof window !== 'undefined' && window.IPPU_EQUIPMENT_RULES) 
                 ? window.IPPU_EQUIPMENT_RULES 
                 : ((typeof IPPU_EQUIPMENT_RULES !== 'undefined') ? IPPU_EQUIPMENT_RULES : []);
-              const matchedIppu = activeIppuRules.find(rule => 
+              const matchedIppu = isCoolerOrAux ? null : activeIppuRules.find(rule => 
                 rule.keywords.some(kw => lowerStr.includes(kw))
               );
 
@@ -5212,21 +5240,46 @@
     }
 
     function getActiveIndustryIppuDefaults() {
+      const ind = (typeof window.getCurrentIndustry === 'function')
+        ? window.getCurrentIndustry()
+        : (document.getElementById('ci-setup-industry')?.value || '');
       if (typeof window.getIndustryIppuDefaults === 'function') {
-        const ind = (typeof window.getCurrentIndustry === 'function') ? window.getCurrentIndustry() : (document.getElementById('ci-setup-industry')?.value || 'Nhôm');
         return window.getIndustryIppuDefaults(ind);
       }
-      let ind = 'Nhôm';
-      try {
-        const comp = JSON.parse(localStorage.getItem('gs_v2_company') || '{}');
-        if (comp.industry) ind = comp.industry;
-      } catch(e) {}
-      const iLower = ind.toLowerCase();
+      let finalInd = ind;
+      if (!finalInd) {
+        try {
+          const comp = JSON.parse(localStorage.getItem('gs_v2_company') || '{}');
+          if (comp.industry) finalInd = comp.industry;
+        } catch(e) {}
+      }
+      const iLower = (finalInd || '').toLowerCase();
       if (iLower.includes('nhôm') || iLower.includes('alumin')) {
         return { productName: 'Nhôm nguyên sinh (Điện phân)', efFactor: 1600, productionUnit: 'tấn' };
       }
       if (iLower.includes('xi măng') || iLower.includes('cement')) {
         return { productName: 'Clanhke (Clinker)', efFactor: 525, productionUnit: 'tấn' };
+      }
+      if (iLower.includes('phân bón') || iLower.includes('fertilizer')) {
+        return { productName: 'Amoniac (NH3) / Phân đạm Ure', efFactor: 1694, productionUnit: 'tấn' };
+      }
+      if (iLower.includes('hydrogen') || iLower.includes('hydro')) {
+        return { productName: 'Khí Hydro (H2)', efFactor: 8900, productionUnit: 'tấn' };
+      }
+      if (iLower.includes('da giày') || iLower.includes('footwear')) {
+        return { productName: 'Giày dép thành phẩm', efFactor: 0, productionUnit: 'đôi' };
+      }
+      if (iLower.includes('điện tử') || iLower.includes('electronic')) {
+        return { productName: 'Bo mạch điện tử PCBA / Thiết bị điện tử', efFactor: 0, productionUnit: 'sản phẩm' };
+      }
+      if (iLower.includes('gỗ') || iLower.includes('wood')) {
+        return { productName: 'Đồ gỗ / Nội thất xuất khẩu', efFactor: 0, productionUnit: 'm3' };
+      }
+      if (iLower.includes('nhiệt điện') || iLower.includes('điện lực')) {
+        return { productName: 'Điện thương phẩm', efFactor: 0, productionUnit: 'MWh' };
+      }
+      if (iLower.includes('vận tải') || iLower.includes('logistics')) {
+        return { productName: 'Khối lượng luân chuyển hàng hóa', efFactor: 0, productionUnit: 'tấn.km' };
       }
       return { productName: 'Thép thô / Phôi thép', efFactor: 60, productionUnit: 'tấn' };
     }
@@ -5785,6 +5838,13 @@
       const customSource = document.getElementById('source-ef-source').value || '';
       const refrigerant = document.getElementById('source-refrigerant').value || '';
       
+      const isProc = isCurrentSourceProcessEmission();
+      const ippuDef = getActiveIndustryIppuDefaults();
+      const procProduct = (document.getElementById('source-proc-product') && document.getElementById('source-proc-product').value) ? document.getElementById('source-proc-product').value : ippuDef.productName;
+      const procUnit = (document.getElementById('source-proc-unit') && document.getElementById('source-proc-unit').value) ? document.getElementById('source-proc-unit').value : (ippuDef.productionUnit || 'tấn');
+      const procAnnualQty = document.getElementById('source-proc-annual-qty') ? parseFloat(document.getElementById('source-proc-annual-qty').value) || 0 : 0;
+      const procDaysWeek = document.getElementById('source-proc-days-week') ? document.getElementById('source-proc-days-week').value : '6';
+
       let efOrRef = ef || refrigerant || '—';
       if (isProc) {
         efOrRef = `${procProduct} (Tùy chỉnh: ${customFactor || ippuDef.efFactor})`;
@@ -5832,13 +5892,6 @@
       let hourlyRate = 0;
       let annualEstQty = 0;
       let annualEstEmissions = 0;
-
-      const isProc = isCurrentSourceProcessEmission();
-      const procAnnualQty = document.getElementById('source-proc-annual-qty') ? parseFloat(document.getElementById('source-proc-annual-qty').value) || 0 : 0;
-      const ippuDef = getActiveIndustryIppuDefaults();
-      const procProduct = (document.getElementById('source-proc-product') && document.getElementById('source-proc-product').value) ? document.getElementById('source-proc-product').value : ippuDef.productName;
-      const procUnit = (document.getElementById('source-proc-unit') && document.getElementById('source-proc-unit').value) ? document.getElementById('source-proc-unit').value : (ippuDef.productionUnit || 'tấn');
-      const procDaysWeek = document.getElementById('source-proc-days-week') ? document.getElementById('source-proc-days-week').value : '6';
 
       if (isProc && (measure === 'Theo sản lượng sản phẩm' || measure === 'Tự đánh giá')) {
         annualEstQty = procAnnualQty;
@@ -7966,13 +8019,54 @@
         }
 
         // Standard select options
+        let activeSector = '';
+        try {
+          const curInd = (typeof window.getCurrentIndustry === 'function') ? window.getCurrentIndustry() : (document.getElementById('ci-setup-industry')?.value || '');
+          const normInd = (curInd || '').toLowerCase();
+          if (normInd.includes('xi măng') || normInd.includes('cement')) activeSector = 'CEMENT';
+          else if (normInd.includes('nhôm') || normInd.includes('alumin')) activeSector = 'ALUMINIUM';
+          else if (normInd.includes('thép') || normInd.includes('steel')) activeSector = 'STEEL';
+          else if (normInd.includes('nhựa') || normInd.includes('hóa chất')) activeSector = 'PLASTICS_CHEMICALS';
+          else if (normInd.includes('phân bón')) activeSector = 'FERTILIZER';
+          else if (normInd.includes('nhiệt điện') || normInd.includes('điện lực')) activeSector = 'POWER_THERMAL';
+          else if (normInd.includes('hydrogen')) activeSector = 'HYDROGEN';
+          else if (normInd.includes('giấy')) activeSector = 'PAPER';
+          else if (normInd.includes('dệt may')) activeSector = 'TEXTILE';
+          else if (normInd.includes('da giày')) activeSector = 'FOOTWEAR';
+          else if (normInd.includes('gỗ')) activeSector = 'WOOD_FURNITURE';
+          else if (normInd.includes('điện tử')) activeSector = 'ELECTRONICS';
+          else if (normInd.includes('thực phẩm') || normInd.includes('đồ uống')) activeSector = 'FOOD_BEVERAGE';
+          else if (normInd.includes('cơ khí')) activeSector = 'MECHANICAL';
+          else if (normInd.includes('nông nghiệp')) activeSector = 'AGRICULTURE';
+          else if (normInd.includes('logistics') || normInd.includes('vận tải')) activeSector = 'LOGISTICS';
+        } catch(e) {}
+
         let selectHtml = `<select class="smart-map-select" data-index="${idx}" style="width: 100%; padding: 6px 8px; font-size: 0.82rem; border: 1px solid #cbd5e1; border-radius: 6px; background: #ffffff;">`;
         selectHtml += `<option value="">-- Giữ nguyên / Tự nhập thủ công --</option>`;
         
         const matchedName = item.match ? item.match.name : '';
-        allStandards.forEach(std => {
-          const isSelected = (matchedName && (std.name === matchedName || std.code === item.match?.code)) ? 'selected' : '';
-          selectHtml += `<option value="${std.name}" ${isSelected}>[${std.sector || std.category || 'Chuẩn'}] ${std.name}</option>`;
+        const matchedCode = item.match ? (item.match.code || '') : '';
+
+        // Sắp xếp ưu tiên thiết bị thuộc đúng ngành nghề đang chọn
+        const sortedStandards = [...allStandards].sort((a, b) => {
+          const aMatch = (activeSector && a.sector === activeSector) ? 1 : 0;
+          const bMatch = (activeSector && b.sector === activeSector) ? 1 : 0;
+          return bMatch - aMatch;
+        });
+
+        let hasSelected = false;
+        sortedStandards.forEach(std => {
+          let isSelected = '';
+          if (!hasSelected && matchedName) {
+            if (matchedCode && std.code === matchedCode) {
+              isSelected = 'selected';
+              hasSelected = true;
+            } else if (std.name === matchedName && (!activeSector || std.sector === activeSector)) {
+              isSelected = 'selected';
+              hasSelected = true;
+            }
+          }
+          selectHtml += `<option value="${std.name}" data-code="${std.code || ''}" ${isSelected}>[${std.sector || std.category || 'Chuẩn'}] ${std.name}</option>`;
         });
         selectHtml += `</select>`;
 
@@ -8043,7 +8137,8 @@
           const badge = rowTr.querySelector('.smart-map-badge');
 
           if (chosen) {
-            const std = allStandards.find(s => s.name === chosen);
+            const chosenCode = this.selectedOptions[0]?.dataset?.code;
+            const std = (chosenCode ? allStandards.find(s => s.code === chosenCode) : null) || allStandards.find(s => s.name === chosen);
             if (std) {
               if (nameInput) nameInput.value = std.name;
               if (capInput && std.ratedCapacity) capInput.value = std.ratedCapacity;

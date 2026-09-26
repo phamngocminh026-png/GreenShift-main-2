@@ -91,8 +91,13 @@
     }
 
     function getIndustryIppuDefaults(ind) {
-      const norm = (ind || getCurrentIndustry()).toLowerCase();
-      if (norm.includes('nhôm') || norm.includes('alu')) {
+      const raw = ind || getCurrentIndustry() || '';
+      const norm = (typeof window.removeVietnameseTones === 'function')
+        ? window.removeVietnameseTones(raw).trim().toLowerCase()
+        : raw.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'd').trim();
+
+      // 1. Nhôm (CBAM)
+      if (norm.includes('nhom') || norm.includes('alu')) {
         return {
           type: 'Bể điện phân nhôm nóng chảy',
           name: 'Quá trình sản xuất (Nhôm nguyên sinh) - Điện phân Hall-Héroult',
@@ -107,7 +112,8 @@
           amountPlaceholder: 'Ví dụ: 250.00'
         };
       }
-      if (norm.includes('xi măng') || norm.includes('xi_mang')) {
+      // 2. Xi măng (CBAM)
+      if (norm.includes('xi mang') || norm.includes('cement')) {
         return {
           type: 'Lò phân hủy đá vôi trong',
           name: 'Quá trình sản xuất (Clinker xi măng) - Lò nung clinker',
@@ -122,7 +128,227 @@
           amountPlaceholder: 'Ví dụ: 1500.00'
         };
       }
-      // Mặc định Sắt Thép
+      // 3. Phân bón (CBAM) - Sản xuất Amoniac (NH3) & Ure
+      if (norm.includes('phan bon') || norm.includes('fertilizer')) {
+        return {
+          type: 'Lò Reforming hơi nước mê-tan trong sản xuất hóa chất',
+          name: 'Quá trình công nghệ - Lò Reforming tổng hợp Amoniac (NH3)',
+          eq: 'Lò Reforming sơ cấp & thứ cấp tổng hợp NH3',
+          efName: 'Sản xuất Amoniac (Reforming khí tự nhiên)',
+          efFactor: '1694',
+          efUnit: 'kgCO2e/tấn',
+          productName: 'Amoniac (NH3) / Phân đạm Ure',
+          productionUnit: 'tấn',
+          managerTitle: 'Kỹ sư công nghệ tổng hợp NH3 / Ure',
+          sourceLabel: 'Thiết bị Quá trình sản xuất (Lò Reforming tổng hợp NH3 / Ure)',
+          amountPlaceholder: 'Ví dụ: 850.00'
+        };
+      }
+      // 4. Hydrogen (CBAM) - SMR Gray/Blue H2
+      if (norm.includes('hydrogen') || norm.includes('hydro')) {
+        return {
+          type: 'Lò Reforming hơi nước mê-tan trong sản xuất hóa chất',
+          name: 'Quá trình công nghệ - Lò Reforming hơi nước (SMR) sản xuất Hydrogen',
+          eq: 'Lò Reforming hơi nước mê-tan (SMR)',
+          efName: 'Sản xuất Hydrogen (Reforming hơi nước SMR)',
+          efFactor: '8900',
+          efUnit: 'kgCO2e/tấn',
+          productName: 'Khí Hydro (H2)',
+          productionUnit: 'tấn',
+          managerTitle: 'Kỹ sư công nghệ sản xuất Hydrogen',
+          sourceLabel: 'Thiết bị Quá trình sản xuất (Lò Reforming hơi nước SMR)',
+          amountPlaceholder: 'Ví dụ: 120.00'
+        };
+      }
+      // 5. Nhiệt điện / Điện lực (CBAM)
+      if (norm.includes('nhiet dien') || norm.includes('dien luc') || norm.includes('power')) {
+        return {
+          type: 'Tổ máy phát điện tua bin hơi / khí',
+          name: 'Sản xuất điện thương phẩm - Tổ máy phát điện tua bin',
+          eq: 'Tổ máy phát điện tua bin',
+          efName: 'Điện thương phẩm phát lên lưới',
+          efFactor: '0',
+          efUnit: 'kgCO2e/MWh',
+          productName: 'Điện thương phẩm',
+          productionUnit: 'MWh',
+          managerTitle: 'Kỹ sư trưởng vận hành nhà máy nhiệt điện',
+          sourceLabel: 'Thiết bị Sản xuất điện thương phẩm (Tổ máy phát điện tua bin)',
+          amountPlaceholder: 'Ví dụ: 12500.00',
+          isProductionOnly: true
+        };
+      }
+      // 6. Nhựa & Hóa chất
+      if (norm.includes('nhua') || norm.includes('hoa chat') || norm.includes('plastic') || norm.includes('chem')) {
+        return {
+          type: 'Dây chuyền ép đùn & polyme hóa hạt nhựa',
+          name: 'Quá trình định hình nhựa & hóa chất kỹ thuật',
+          eq: 'Dây chuyền ép đùn & máy ép phun định hình',
+          efName: 'Gia công hạt nhựa định hình',
+          efFactor: '0',
+          efUnit: 'kgCO2e/tấn',
+          productName: 'Hạt nhựa & Sản phẩm nhựa kỹ thuật',
+          productionUnit: 'tấn',
+          managerTitle: 'Kỹ sư công nghệ hóa chất / polyme',
+          sourceLabel: 'Thiết bị Quá trình gia công định hình nhựa & hóa chất',
+          amountPlaceholder: 'Ví dụ: 350.00',
+          isProductionOnly: true
+        };
+      }
+      // 7. Da giày
+      if (norm.includes('da giay') || norm.includes('giay dep') || norm.includes('footwear') || (norm.includes('da') && !norm.includes('da voi'))) {
+        return {
+          type: 'Dây chuyền gò ráp & lưu hóa da giày',
+          name: 'Quá trình sản xuất da giày thành phẩm',
+          eq: 'Dây chuyền gò ráp da giày tự động',
+          efName: 'Sản xuất giày dép xuất khẩu',
+          efFactor: '0',
+          efUnit: 'kgCO2e/đôi',
+          productName: 'Giày dép thành phẩm',
+          productionUnit: 'đôi',
+          managerTitle: 'Kỹ sư công nghệ gò ráp da giày',
+          sourceLabel: 'Thiết bị Dây chuyền sản xuất da giày',
+          amountPlaceholder: 'Ví dụ: 50000.00',
+          isProductionOnly: true
+        };
+      }
+      // 8. Bao bì & Giấy
+      if (norm.includes('bao bi') || norm.includes('paper') || (norm.includes('giay') && !norm.includes('da'))) {
+        return {
+          type: 'Dây chuyền máy xeo giấy & hoàn tất bao bì',
+          name: 'Quá trình sản xuất giấy & bao bì carton',
+          eq: 'Dây chuyền máy xeo giấy công nghiệp',
+          efName: 'Sản xuất giấy & bao bì thành phẩm',
+          efFactor: '0',
+          efUnit: 'kgCO2e/tấn',
+          productName: 'Giấy & Bao bì carton thành phẩm',
+          productionUnit: 'tấn',
+          managerTitle: 'Kỹ sư công nghệ bột giấy và xeo giấy',
+          sourceLabel: 'Thiết bị Dây chuyền sản xuất giấy & bao bì',
+          amountPlaceholder: 'Ví dụ: 450.00',
+          isProductionOnly: true
+        };
+      }
+      // 9. Dệt may
+      if (norm.includes('det') || norm.includes('may') || norm.includes('textile')) {
+        return {
+          type: 'Dây chuyền dệt nhuộm & may công nghiệp',
+          name: 'Quá trình sản xuất dệt may thành phẩm',
+          eq: 'Dây chuyền dệt nhuộm & xưởng may may công nghiệp',
+          efName: 'Gia công dệt may thành phẩm',
+          efFactor: '0',
+          efUnit: 'kgCO2e/tấn',
+          productName: 'Sản phẩm dệt may / Vải hoàn tất',
+          productionUnit: 'tấn',
+          managerTitle: 'Kỹ sư xưởng dệt nhuộm / may công nghiệp',
+          sourceLabel: 'Thiết bị Dây chuyền dệt may hoàn tất',
+          amountPlaceholder: 'Ví dụ: 80.00',
+          isProductionOnly: true
+        };
+      }
+      // 10. Gỗ & Nội thất
+      if (norm.includes('go') || norm.includes('noi that') || norm.includes('wood')) {
+        return {
+          type: 'Dây chuyền xẻ sấy & gia công nội thất gỗ',
+          name: 'Quá trình chế biến gỗ & sản xuất nội thất',
+          eq: 'Hệ thống lò sấy gỗ & trung tâm gia công CNC gỗ',
+          efName: 'Chế biến gỗ & sản phẩm nội thất',
+          efFactor: '0',
+          efUnit: 'kgCO2e/m3',
+          productName: 'Đồ gỗ / Nội thất xuất khẩu',
+          productionUnit: 'm3',
+          managerTitle: 'Kỹ sư công nghệ chế biến lâm sản',
+          sourceLabel: 'Thiết bị Chế biến gỗ & sản xuất nội thất',
+          amountPlaceholder: 'Ví dụ: 600.00',
+          isProductionOnly: true
+        };
+      }
+      // 11. Điện tử
+      if (norm.includes('dien tu') || norm.includes('ban dan') || norm.includes('electronic')) {
+        return {
+          type: 'Dây chuyền dán bề mặt linh kiện SMT',
+          name: 'Quá trình lắp ráp bo mạch điện tử & bán dẫn',
+          eq: 'Dây chuyền gắn chip SMT & lò hàn đối lưu Reflow',
+          efName: 'Lắp ráp bo mạch điện tử PCBA',
+          efFactor: '0',
+          efUnit: 'kgCO2e/sản phẩm',
+          productName: 'Bo mạch điện tử PCBA / Thiết bị điện tử',
+          productionUnit: 'sản phẩm',
+          managerTitle: 'Kỹ sư trưởng dây chuyền SMT / Bán dẫn',
+          sourceLabel: 'Thiết bị Dây chuyền sản xuất bo mạch SMT',
+          amountPlaceholder: 'Ví dụ: 100000.00',
+          isProductionOnly: true
+        };
+      }
+      // 12. Thực phẩm & Đồ uống
+      if (norm.includes('thuc pham') || norm.includes('do uong') || norm.includes('food')) {
+        return {
+          type: 'Dây chuyền chế biến & đóng gói thực phẩm',
+          name: 'Quá trình chế biến & đóng hộp tiệt trùng',
+          eq: 'Dây chuyền thanh trùng & đóng chai tiệt trùng',
+          efName: 'Chế biến thực phẩm & đồ uống',
+          efFactor: '0',
+          efUnit: 'kgCO2e/tấn',
+          productName: 'Thực phẩm & Đồ uống đóng gói',
+          productionUnit: 'tấn',
+          managerTitle: 'Kỹ sư công nghệ chế biến thực phẩm',
+          sourceLabel: 'Thiết bị Dây chuyền chế biến thực phẩm & đồ uống',
+          amountPlaceholder: 'Ví dụ: 1200.00',
+          isProductionOnly: true
+        };
+      }
+      // 13. Cơ khí chế tạo
+      if (norm.includes('co khi') || norm.includes('che tao') || norm.includes('mechanical')) {
+        return {
+          type: 'Trung tâm gia công CNC & Dây chuyền hàn cắt',
+          name: 'Quá trình gia công cơ khí chính xác & kết cấu',
+          eq: 'Trung tâm gia công phay tiện CNC 5 trục',
+          efName: 'Gia công chi tiết cơ khí chính xác',
+          efFactor: '0',
+          efUnit: 'kgCO2e/tấn',
+          productName: 'Chi tiết cơ khí / Kết cấu kim loại',
+          productionUnit: 'tấn',
+          managerTitle: 'Kỹ sư trưởng xưởng gia công cơ khí',
+          sourceLabel: 'Thiết bị Gia công cơ khí & hàn cắt kết cấu',
+          amountPlaceholder: 'Ví dụ: 150.00',
+          isProductionOnly: true
+        };
+      }
+      // 14. Nông nghiệp
+      if (norm.includes('nong nghiep') || norm.includes('chan nuoi') || norm.includes('agri')) {
+        return {
+          type: 'Hệ thống chuồng trại khép kín & thu hoạch tự động',
+          name: 'Quá trình chăn nuôi & canh tác nông nghiệp',
+          eq: 'Hệ thống chuồng kín làm mát & cho ăn tự động',
+          efName: 'Chăn nuôi gia súc, gia cầm & nông sản',
+          efFactor: '0',
+          efUnit: 'kgCO2e/tấn',
+          productName: 'Nông sản & Thực phẩm chăn nuôi',
+          productionUnit: 'tấn',
+          managerTitle: 'Kỹ sư nông nghiệp / Kỹ thuật viên trại',
+          sourceLabel: 'Hệ thống thiết bị nông nghiệp & chăn nuôi',
+          amountPlaceholder: 'Ví dụ: 500.00',
+          isProductionOnly: true
+        };
+      }
+      // 15. Vận tải & Logistics
+      if (norm.includes('van tai') || norm.includes('logistics')) {
+        return {
+          type: 'Đội xe vận tải & Hệ thống kho bãi bến cảng',
+          name: 'Quá trình vận tải hàng hóa & dịch vụ logistics',
+          eq: 'Đội xe đầu kéo container & cẩu giàn cảng ICD',
+          efName: 'Dịch vụ vận chuyển hàng hóa logistics',
+          efFactor: '0',
+          efUnit: 'kgCO2e/tấn.km',
+          productName: 'Khối lượng luân chuyển hàng hóa',
+          productionUnit: 'tấn.km',
+          managerTitle: 'Quản lý đội xe & Điều hành logistics',
+          sourceLabel: 'Phương tiện vận tải & Thiết bị kho bãi',
+          amountPlaceholder: 'Ví dụ: 1500000.00',
+          isProductionOnly: true
+        };
+      }
+
+      // 16. Mặc định Sắt Thép (CBAM)
       return {
         type: 'Lò thổi oxy hoặc lò hồ quang điện trong luyện thép',
         name: 'Quá trình luyện thép - Lò hồ quang điện EAF 100 tấn/mẻ',
@@ -137,6 +363,9 @@
         amountPlaceholder: 'Ví dụ: 1916.93'
       };
     }
+
+    window.getCurrentIndustry = getCurrentIndustry;
+    window.getIndustryIppuDefaults = getIndustryIppuDefaults;
 
     function getDynamicTree() {
       const tree = {};
@@ -1855,9 +2084,11 @@
     function formatRateUnit(capUnit, sourceType) {
       if (!capUnit) return (sourceType && sourceType.toLowerCase().includes('điện')) ? 'kWh/h' : 'lít/h';
       let u = capUnit.trim();
-      if (u.endsWith('/h') || u.endsWith('/giờ')) return u;
-      if (u.toLowerCase() === 'kw') return 'kWh/h';
-      return `${u}/h`;
+      const uLower = u.toLowerCase();
+      if (uLower.endsWith('/h') || uLower.endsWith('/giờ')) return u;
+      if (uLower === 'kw' || uLower === 'kva') return 'kWh/h';
+      const base = u.replace(/\/(ngày|ngay|tháng|thang|năm|nam|tuần|tuan|day|month|year|ca|shift)$/i, '').trim();
+      return `${base}/h`;
     }
 
     function normalizeConsumptionUnit(unitStr, sourceType, sourceName, category) {
